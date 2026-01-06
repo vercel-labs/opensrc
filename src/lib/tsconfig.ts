@@ -1,8 +1,8 @@
-import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { readFile, writeFile } from "fs/promises";
+import { join } from "path";
+import { existsSync } from "fs";
 
-const OPENSRC_DIR = 'opensrc';
+const OPENSRC_DIR = "opensrc";
 
 interface TsConfig {
   exclude?: string[];
@@ -13,21 +13,23 @@ interface TsConfig {
  * Check if tsconfig.json exists
  */
 export function hasTsConfig(cwd: string = process.cwd()): boolean {
-  return existsSync(join(cwd, 'tsconfig.json'));
+  return existsSync(join(cwd, "tsconfig.json"));
 }
 
 /**
  * Check if tsconfig.json already excludes opensrc/
  */
-export async function hasOpensrcExclude(cwd: string = process.cwd()): Promise<boolean> {
-  const tsconfigPath = join(cwd, 'tsconfig.json');
+export async function hasOpensrcExclude(
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  const tsconfigPath = join(cwd, "tsconfig.json");
 
   if (!existsSync(tsconfigPath)) {
     return false;
   }
 
   try {
-    const content = await readFile(tsconfigPath, 'utf-8');
+    const content = await readFile(tsconfigPath, "utf-8");
     const config = JSON.parse(content) as TsConfig;
 
     if (!config.exclude) {
@@ -35,7 +37,10 @@ export async function hasOpensrcExclude(cwd: string = process.cwd()): Promise<bo
     }
 
     return config.exclude.some(
-      (entry) => entry === OPENSRC_DIR || entry === `${OPENSRC_DIR}/` || entry === `./${OPENSRC_DIR}`
+      (entry) =>
+        entry === OPENSRC_DIR ||
+        entry === `${OPENSRC_DIR}/` ||
+        entry === `./${OPENSRC_DIR}`,
     );
   } catch {
     return false;
@@ -45,8 +50,10 @@ export async function hasOpensrcExclude(cwd: string = process.cwd()): Promise<bo
 /**
  * Add opensrc/ to tsconfig.json exclude array
  */
-export async function ensureTsconfigExclude(cwd: string = process.cwd()): Promise<boolean> {
-  const tsconfigPath = join(cwd, 'tsconfig.json');
+export async function ensureTsconfigExclude(
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  const tsconfigPath = join(cwd, "tsconfig.json");
 
   if (!existsSync(tsconfigPath)) {
     return false;
@@ -58,7 +65,7 @@ export async function ensureTsconfigExclude(cwd: string = process.cwd()): Promis
   }
 
   try {
-    const content = await readFile(tsconfigPath, 'utf-8');
+    const content = await readFile(tsconfigPath, "utf-8");
     const config = JSON.parse(content) as TsConfig;
 
     if (!config.exclude) {
@@ -68,10 +75,13 @@ export async function ensureTsconfigExclude(cwd: string = process.cwd()): Promis
     config.exclude.push(OPENSRC_DIR);
 
     // Preserve formatting by using 2-space indent (most common for tsconfig)
-    await writeFile(tsconfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    await writeFile(
+      tsconfigPath,
+      JSON.stringify(config, null, 2) + "\n",
+      "utf-8",
+    );
     return true;
   } catch {
     return false;
   }
 }
-

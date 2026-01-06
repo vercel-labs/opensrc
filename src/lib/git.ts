@@ -1,10 +1,10 @@
-import { simpleGit, SimpleGit } from 'simple-git';
-import { rm, mkdir, readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
-import type { ResolvedPackage, FetchResult } from '../types.js';
+import { simpleGit, SimpleGit } from "simple-git";
+import { rm, mkdir, readFile, writeFile } from "fs/promises";
+import { join } from "path";
+import { existsSync } from "fs";
+import type { ResolvedPackage, FetchResult } from "../types.js";
 
-const OPENSRC_DIR = 'opensrc';
+const OPENSRC_DIR = "opensrc";
 
 /**
  * Get the opensrc directory path
@@ -16,7 +16,10 @@ export function getOpensrcDir(cwd: string = process.cwd()): string {
 /**
  * Get the path where a package's source will be stored
  */
-export function getPackagePath(packageName: string, cwd: string = process.cwd()): string {
+export function getPackagePath(
+  packageName: string,
+  cwd: string = process.cwd(),
+): string {
   // Handle scoped packages: @scope/name -> @scope/name (keep the structure)
   return join(getOpensrcDir(cwd), packageName);
 }
@@ -24,7 +27,10 @@ export function getPackagePath(packageName: string, cwd: string = process.cwd())
 /**
  * Check if a package source already exists
  */
-export function packageExists(packageName: string, cwd: string = process.cwd()): boolean {
+export function packageExists(
+  packageName: string,
+  cwd: string = process.cwd(),
+): boolean {
   return existsSync(getPackagePath(packageName, cwd));
 }
 
@@ -35,21 +41,19 @@ async function cloneAtTag(
   git: SimpleGit,
   repoUrl: string,
   targetPath: string,
-  version: string
+  version: string,
 ): Promise<{ success: boolean; tag?: string; error?: string }> {
   // Tags to try in order of preference
-  const tagsToTry = [
-    `v${version}`,
-    version,
-    `${version}`,
-  ];
-  
+  const tagsToTry = [`v${version}`, version, `${version}`];
+
   for (const tag of tagsToTry) {
     try {
       await git.clone(repoUrl, targetPath, [
-        '--depth', '1',
-        '--branch', tag,
-        '--single-branch',
+        "--depth",
+        "1",
+        "--branch",
+        tag,
+        "--single-branch",
       ]);
       return { success: true, tag };
     } catch {
@@ -57,19 +61,19 @@ async function cloneAtTag(
       continue;
     }
   }
-  
+
   // If no tag worked, clone default branch with a warning
   try {
-    await git.clone(repoUrl, targetPath, ['--depth', '1']);
-    return { 
-      success: true, 
-      tag: 'HEAD',
-      error: `Could not find tag for version ${version}, cloned default branch instead`
+    await git.clone(repoUrl, targetPath, ["--depth", "1"]);
+    return {
+      success: true,
+      tag: "HEAD",
+      error: `Could not find tag for version ${version}, cloned default branch instead`,
     };
   } catch (err) {
-    return { 
-      success: false, 
-      error: `Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`
+    return {
+      success: false,
+      error: `Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
@@ -80,7 +84,7 @@ async function cloneAtTag(
 async function writeMetadata(
   packagePath: string,
   resolved: ResolvedPackage,
-  actualTag: string
+  actualTag: string,
 ): Promise<void> {
   const metadata = {
     name: resolved.name,
@@ -90,9 +94,9 @@ async function writeMetadata(
     fetchedTag: actualTag,
     fetchedAt: new Date().toISOString(),
   };
-  
-  const metadataPath = join(packagePath, '.opensrc-meta.json');
-  await writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8');
+
+  const metadataPath = join(packagePath, ".opensrc-meta.json");
+  await writeFile(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
 }
 
 /**
@@ -100,7 +104,7 @@ async function writeMetadata(
  */
 export async function readMetadata(
   packageName: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
 ): Promise<{
   name: string;
   version: string;
@@ -110,14 +114,14 @@ export async function readMetadata(
   fetchedAt: string;
 } | null> {
   const packagePath = getPackagePath(packageName, cwd);
-  const metadataPath = join(packagePath, '.opensrc-meta.json');
-  
+  const metadataPath = join(packagePath, ".opensrc-meta.json");
+
   if (!existsSync(metadataPath)) {
     return null;
   }
-  
+
   try {
-    const content = await readFile(metadataPath, 'utf-8');
+    const content = await readFile(metadataPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -129,31 +133,36 @@ export async function readMetadata(
  */
 export async function fetchSource(
   resolved: ResolvedPackage,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
 ): Promise<FetchResult> {
   const git = simpleGit();
   const packagePath = getPackagePath(resolved.name, cwd);
   const opensrcDir = getOpensrcDir(cwd);
-  
+
   // Ensure .opensrc directory exists
   if (!existsSync(opensrcDir)) {
     await mkdir(opensrcDir, { recursive: true });
   }
-  
+
   // Remove existing if present
   if (existsSync(packagePath)) {
     await rm(packagePath, { recursive: true, force: true });
   }
-  
+
   // Ensure parent directory exists for scoped packages
-  const parentDir = join(packagePath, '..');
+  const parentDir = join(packagePath, "..");
   if (!existsSync(parentDir)) {
     await mkdir(parentDir, { recursive: true });
   }
-  
+
   // Clone the repository
-  const cloneResult = await cloneAtTag(git, resolved.repoUrl, packagePath, resolved.version);
-  
+  const cloneResult = await cloneAtTag(
+    git,
+    resolved.repoUrl,
+    packagePath,
+    resolved.version,
+  );
+
   if (!cloneResult.success) {
     return {
       package: resolved.name,
@@ -163,22 +172,22 @@ export async function fetchSource(
       error: cloneResult.error,
     };
   }
-  
+
   // Remove .git directory to save space and avoid confusion
-  const gitDir = join(packagePath, '.git');
+  const gitDir = join(packagePath, ".git");
   if (existsSync(gitDir)) {
     await rm(gitDir, { recursive: true, force: true });
   }
-  
+
   // Write metadata
-  await writeMetadata(packagePath, resolved, cloneResult.tag || 'HEAD');
-  
+  await writeMetadata(packagePath, resolved, cloneResult.tag || "HEAD");
+
   // Determine the actual source path (for monorepos)
   let sourcePath = packagePath;
   if (resolved.repoDirectory) {
     sourcePath = join(packagePath, resolved.repoDirectory);
   }
-  
+
   return {
     package: resolved.name,
     version: resolved.version,
@@ -193,21 +202,21 @@ export async function fetchSource(
  */
 export async function removeSource(
   packageName: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
 ): Promise<boolean> {
   const packagePath = getPackagePath(packageName, cwd);
-  
+
   if (!existsSync(packagePath)) {
     return false;
   }
-  
+
   await rm(packagePath, { recursive: true, force: true });
-  
+
   // Clean up empty parent directories (for scoped packages)
-  if (packageName.startsWith('@')) {
-    const scopeDir = join(getOpensrcDir(cwd), packageName.split('/')[0]);
+  if (packageName.startsWith("@")) {
+    const scopeDir = join(getOpensrcDir(cwd), packageName.split("/")[0]);
     try {
-      const { readdir } = await import('fs/promises');
+      const { readdir } = await import("fs/promises");
       const contents = await readdir(scopeDir);
       if (contents.length === 0) {
         await rm(scopeDir, { recursive: true, force: true });
@@ -216,51 +225,51 @@ export async function removeSource(
       // Ignore errors cleaning up scope dir
     }
   }
-  
+
   return true;
 }
 
 /**
  * List all fetched packages
  */
-export async function listSources(
-  cwd: string = process.cwd()
-): Promise<Array<{
-  name: string;
-  version: string;
-  path: string;
-  fetchedAt: string;
-}>> {
+export async function listSources(cwd: string = process.cwd()): Promise<
+  Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }>
+> {
   const opensrcDir = getOpensrcDir(cwd);
-  
+
   if (!existsSync(opensrcDir)) {
     return [];
   }
-  
-  const { readdir } = await import('fs/promises');
+
+  const { readdir } = await import("fs/promises");
   const results: Array<{
     name: string;
     version: string;
     path: string;
     fetchedAt: string;
   }> = [];
-  
+
   const entries = await readdir(opensrcDir, { withFileTypes: true });
-  
+
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    
-    if (entry.name.startsWith('@')) {
+
+    if (entry.name.startsWith("@")) {
       // Scoped package - look inside
       const scopeDir = join(opensrcDir, entry.name);
       const scopeEntries = await readdir(scopeDir, { withFileTypes: true });
-      
+
       for (const scopeEntry of scopeEntries) {
         if (!scopeEntry.isDirectory()) continue;
-        
+
         const packageName = `${entry.name}/${scopeEntry.name}`;
         const metadata = await readMetadata(packageName, cwd);
-        
+
         if (metadata) {
           results.push({
             name: packageName,
@@ -273,7 +282,7 @@ export async function listSources(
     } else {
       // Regular package
       const metadata = await readMetadata(entry.name, cwd);
-      
+
       if (metadata) {
         results.push({
           name: entry.name,
@@ -284,6 +293,6 @@ export async function listSources(
       }
     }
   }
-  
+
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }

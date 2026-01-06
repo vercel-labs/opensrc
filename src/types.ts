@@ -10,7 +10,7 @@ export interface PackageInfo {
 
 export interface RegistryResponse {
   name: string;
-  'dist-tags': {
+  "dist-tags": {
     latest: string;
     [key: string]: string;
   };
@@ -44,4 +44,3 @@ export interface InstalledPackage {
   name: string;
   version: string;
 }
-

@@ -1,13 +1,13 @@
-import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { readFile, writeFile } from "fs/promises";
+import { join } from "path";
+import { existsSync } from "fs";
 
-const AGENTS_FILE = 'AGENTS.md';
-const OPENSRC_DIR = 'opensrc';
-const SOURCES_FILE = 'sources.json';
-const SECTION_START = '## Source Code Reference';
-const SECTION_MARKER = '<!-- opensrc:start -->';
-const SECTION_END_MARKER = '<!-- opensrc:end -->';
+const AGENTS_FILE = "AGENTS.md";
+const OPENSRC_DIR = "opensrc";
+const SOURCES_FILE = "sources.json";
+const SECTION_START = "## Source Code Reference";
+const SECTION_MARKER = "<!-- opensrc:start -->";
+const SECTION_END_MARKER = "<!-- opensrc:end -->";
 
 /**
  * The static AGENTS.md section that points to the index file
@@ -42,8 +42,13 @@ export interface PackageIndex {
  * Update the index.json file in .opensrc/
  */
 export async function updatePackageIndex(
-  packages: Array<{ name: string; version: string; path: string; fetchedAt: string }>,
-  cwd: string = process.cwd()
+  packages: Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }>,
+  cwd: string = process.cwd(),
 ): Promise<void> {
   const opensrcDir = join(cwd, OPENSRC_DIR);
   const sourcesPath = join(opensrcDir, SOURCES_FILE);
@@ -51,14 +56,14 @@ export async function updatePackageIndex(
   if (packages.length === 0) {
     // Remove index file if no packages
     if (existsSync(sourcesPath)) {
-      const { rm } = await import('fs/promises');
+      const { rm } = await import("fs/promises");
       await rm(sourcesPath, { force: true });
     }
     return;
   }
 
   const index: PackageIndex = {
-    packages: packages.map(p => ({
+    packages: packages.map((p) => ({
       name: p.name,
       version: p.version,
       path: p.path,
@@ -67,13 +72,15 @@ export async function updatePackageIndex(
     updatedAt: new Date().toISOString(),
   };
 
-  await writeFile(sourcesPath, JSON.stringify(index, null, 2), 'utf-8');
+  await writeFile(sourcesPath, JSON.stringify(index, null, 2), "utf-8");
 }
 
 /**
  * Check if AGENTS.md has an opensrc section
  */
-export async function hasOpensrcSection(cwd: string = process.cwd()): Promise<boolean> {
+export async function hasOpensrcSection(
+  cwd: string = process.cwd(),
+): Promise<boolean> {
   const agentsPath = join(cwd, AGENTS_FILE);
 
   if (!existsSync(agentsPath)) {
@@ -81,7 +88,7 @@ export async function hasOpensrcSection(cwd: string = process.cwd()): Promise<bo
   }
 
   try {
-    const content = await readFile(agentsPath, 'utf-8');
+    const content = await readFile(agentsPath, "utf-8");
     return content.includes(SECTION_MARKER);
   } catch {
     return false;
@@ -91,7 +98,9 @@ export async function hasOpensrcSection(cwd: string = process.cwd()): Promise<bo
 /**
  * Ensure AGENTS.md has the static opensrc section
  */
-export async function ensureAgentsMd(cwd: string = process.cwd()): Promise<boolean> {
+export async function ensureAgentsMd(
+  cwd: string = process.cwd(),
+): Promise<boolean> {
   const agentsPath = join(cwd, AGENTS_FILE);
 
   // Already has section
@@ -99,13 +108,13 @@ export async function ensureAgentsMd(cwd: string = process.cwd()): Promise<boole
     return false;
   }
 
-  let content = '';
+  let content = "";
 
   if (existsSync(agentsPath)) {
-    content = await readFile(agentsPath, 'utf-8');
+    content = await readFile(agentsPath, "utf-8");
     // Ensure there's a newline at the end before we append
-    if (content.length > 0 && !content.endsWith('\n')) {
-      content += '\n';
+    if (content.length > 0 && !content.endsWith("\n")) {
+      content += "\n";
     }
   } else {
     // Create new file
@@ -117,7 +126,7 @@ Instructions for AI coding agents working with this codebase.
 
   content += STATIC_SECTION;
 
-  await writeFile(agentsPath, content, 'utf-8');
+  await writeFile(agentsPath, content, "utf-8");
   return true;
 }
 
@@ -125,8 +134,13 @@ Instructions for AI coding agents working with this codebase.
  * Update AGENTS.md and the package index
  */
 export async function updateAgentsMd(
-  packages: Array<{ name: string; version: string; path: string; fetchedAt: string }>,
-  cwd: string = process.cwd()
+  packages: Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }>,
+  cwd: string = process.cwd(),
 ): Promise<boolean> {
   // Always update the index file
   await updatePackageIndex(packages, cwd);
@@ -142,7 +156,9 @@ export async function updateAgentsMd(
 /**
  * Remove the opensrc section from AGENTS.md
  */
-export async function removeOpensrcSection(cwd: string = process.cwd()): Promise<boolean> {
+export async function removeOpensrcSection(
+  cwd: string = process.cwd(),
+): Promise<boolean> {
   const agentsPath = join(cwd, AGENTS_FILE);
 
   if (!existsSync(agentsPath)) {
@@ -150,7 +166,7 @@ export async function removeOpensrcSection(cwd: string = process.cwd()): Promise
   }
 
   try {
-    const content = await readFile(agentsPath, 'utf-8');
+    const content = await readFile(agentsPath, "utf-8");
 
     if (!content.includes(SECTION_MARKER)) {
       return false;
@@ -168,13 +184,13 @@ export async function removeOpensrcSection(cwd: string = process.cwd()): Promise
 
     let newContent = before;
     if (after) {
-      newContent += '\n\n' + after;
+      newContent += "\n\n" + after;
     }
 
     // Clean up multiple consecutive newlines
-    newContent = newContent.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+    newContent = newContent.replace(/\n{3,}/g, "\n\n").trim() + "\n";
 
-    await writeFile(agentsPath, newContent, 'utf-8');
+    await writeFile(agentsPath, newContent, "utf-8");
     return true;
   } catch {
     return false;

@@ -1,27 +1,29 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
-import { fetchCommand } from './commands/fetch.js';
-import { listCommand } from './commands/list.js';
-import { removeCommand } from './commands/remove.js';
+import { Command } from "commander";
+import { fetchCommand } from "./commands/fetch.js";
+import { listCommand } from "./commands/list.js";
+import { removeCommand } from "./commands/remove.js";
 
 const program = new Command();
 
 program
-  .name('opensrc')
-  .description('Fetch source code for npm packages to give coding agents deeper context')
-  .version('0.1.0');
+  .name("opensrc")
+  .description(
+    "Fetch source code for npm packages to give coding agents deeper context",
+  )
+  .version("0.1.0");
 
 // Default command: fetch packages
 program
-  .argument('[packages...]', 'packages to fetch (e.g., zod, react@18.2.0)')
-  .option('--cwd <path>', 'working directory (default: current directory)')
+  .argument("[packages...]", "packages to fetch (e.g., zod, react@18.2.0)")
+  .option("--cwd <path>", "working directory (default: current directory)")
   .action(async (packages: string[], options: { cwd?: string }) => {
     if (packages.length === 0) {
       program.help();
       return;
     }
-    
+
     await fetchCommand(packages, {
       cwd: options.cwd,
     });
@@ -29,10 +31,10 @@ program
 
 // List command
 program
-  .command('list')
-  .description('List all fetched package sources')
-  .option('--json', 'output as JSON')
-  .option('--cwd <path>', 'working directory (default: current directory)')
+  .command("list")
+  .description("List all fetched package sources")
+  .option("--json", "output as JSON")
+  .option("--cwd <path>", "working directory (default: current directory)")
   .action(async (options: { json?: boolean; cwd?: string }) => {
     await listCommand({
       json: options.json,
@@ -42,10 +44,10 @@ program
 
 // Remove command
 program
-  .command('remove <packages...>')
-  .alias('rm')
-  .description('Remove fetched source code for packages')
-  .option('--cwd <path>', 'working directory (default: current directory)')
+  .command("remove <packages...>")
+  .alias("rm")
+  .description("Remove fetched source code for packages")
+  .option("--cwd <path>", "working directory (default: current directory)")
   .action(async (packages: string[], options: { cwd?: string }) => {
     await removeCommand(packages, {
       cwd: options.cwd,

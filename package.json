@@ -17,7 +17,10 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx}\"",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "cli",
@@ -34,6 +37,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "prettier": "^3.4.0",
     "typescript": "^5.7.0"
   },
   "engines": {
