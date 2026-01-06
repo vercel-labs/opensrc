@@ -13,9 +13,9 @@ const SECTION_END_MARKER = '<!-- opensrc:end -->';
  * The static AGENTS.md section that points to the index file
  */
 const STATIC_SECTION = `
-${SECTION_START}
-
 ${SECTION_MARKER}
+
+${SECTION_START}
 
 Source code for dependencies is available in \`opensrc/\` for deeper understanding of implementation details.
 
@@ -156,7 +156,7 @@ export async function removeOpensrcSection(cwd: string = process.cwd()): Promise
       return false;
     }
 
-    const startIdx = content.indexOf(SECTION_START);
+    const startIdx = content.indexOf(SECTION_MARKER);
     const endIdx = content.indexOf(SECTION_END_MARKER);
 
     if (startIdx === -1 || endIdx === -1) {

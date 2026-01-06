@@ -2,9 +2,9 @@
 
 Instructions for AI coding agents working with this codebase.
 
-## Source Code Reference
-
 <!-- opensrc:start -->
+
+## Source Code Reference
 
 Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
 
