@@ -98,9 +98,10 @@ async function getVersionFromPnpmLock(
     
     // Look for the package in the lockfile
     // pnpm format: 'packageName@version(peer-deps):' or 'packageName@version:'
-    // We need to stop at '(' (peer deps), ':' (end of key), or quotes
+    // We need to stop at '(' or ')' (peer deps), ':' (end of key), or quotes
+    // The ')' case handles matching inside another package's peer deps like ai@6.0.6(zod@4.3.4)
     const escapedName = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`['"]?${escapedName}@([^(':"\\s]+)`, 'g');
+    const regex = new RegExp(`['"]?${escapedName}@([^(':"\\s)]+)`, 'g');
     const matches = [...content.matchAll(regex)];
     
     if (matches.length > 0) {
