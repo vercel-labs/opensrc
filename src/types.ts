@@ -44,3 +44,28 @@ export interface InstalledPackage {
   name: string;
   version: string;
 }
+
+/**
+ * Parsed repository specification
+ */
+export interface RepoSpec {
+  owner: string;
+  repo: string;
+  ref?: string; // branch, tag, or commit
+}
+
+/**
+ * Type of input: npm package or GitHub repo
+ */
+export type InputType = "package" | "repo";
+
+/**
+ * Resolved repository information (for direct GitHub repos)
+ */
+export interface ResolvedRepo {
+  owner: string;
+  repo: string;
+  ref: string; // branch, tag, or commit (resolved)
+  repoUrl: string;
+  displayName: string; // e.g., "owner--repo"
+}

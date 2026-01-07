@@ -1,10 +1,17 @@
-import { parsePackageSpec, resolvePackage } from "../lib/registry.js";
+import {
+  parsePackageSpec,
+  resolvePackage,
+  detectInputType,
+} from "../lib/registry.js";
+import { parseRepoSpec, resolveRepo } from "../lib/repo.js";
 import { detectInstalledVersion } from "../lib/version.js";
 import {
   fetchSource,
+  fetchRepoSource,
   packageExists,
   listSources,
   readMetadata,
+  readRepoMetadata,
 } from "../lib/git.js";
 import { ensureGitignore } from "../lib/gitignore.js";
 import { ensureTsconfigExclude } from "../lib/tsconfig.js";
@@ -52,7 +59,9 @@ async function checkFileModificationPermission(
   }
 
   // Prompt user for permission
-  console.log("\nopensrc can update the following files for better integration:");
+  console.log(
+    "\nopensrc can update the following files for better integration:",
+  );
   console.log("  • .gitignore - add opensrc/ to ignore list");
   console.log("  • tsconfig.json - exclude opensrc/ from compilation");
   console.log("  • AGENTS.md - add source code reference section\n");
@@ -72,7 +81,167 @@ async function checkFileModificationPermission(
 }
 
 /**
- * Fetch source code for one or more packages
+ * Fetch a GitHub repository
+ */
+async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
+  const repoSpec = parseRepoSpec(spec);
+
+  if (!repoSpec) {
+    return {
+      package: spec,
+      version: "",
+      path: "",
+      success: false,
+      error: `Invalid repository format: ${spec}`,
+    };
+  }
+
+  const displayName = `${repoSpec.owner}--${repoSpec.repo}`;
+  console.log(`\nFetching ${repoSpec.owner}/${repoSpec.repo}...`);
+
+  try {
+    // Check if already exists with the same ref
+    if (packageExists(displayName, cwd)) {
+      const existingMeta = await readRepoMetadata(displayName, cwd);
+      if (
+        existingMeta &&
+        repoSpec.ref &&
+        existingMeta.version === repoSpec.ref
+      ) {
+        console.log(`  ✓ Already up to date (${repoSpec.ref})`);
+        return {
+          package: displayName,
+          version: existingMeta.version,
+          path: `${cwd}/opensrc/${displayName}`,
+          success: true,
+        };
+      } else if (existingMeta) {
+        console.log(
+          `  → Updating ${existingMeta.version} → ${repoSpec.ref || "default branch"}`,
+        );
+      }
+    }
+
+    // Resolve repo info from GitHub API
+    console.log(`  → Resolving repository...`);
+    const resolved = await resolveRepo(repoSpec);
+    console.log(`  → Found: ${resolved.repoUrl}`);
+    console.log(`  → Ref: ${resolved.ref}`);
+
+    // Fetch the source
+    console.log(`  → Cloning at ${resolved.ref}...`);
+    const result = await fetchRepoSource(resolved, cwd);
+
+    if (result.success) {
+      console.log(`  ✓ Saved to ${result.path}`);
+      if (result.error) {
+        console.log(`  ⚠ ${result.error}`);
+      }
+    } else {
+      console.log(`  ✗ Failed: ${result.error}`);
+    }
+
+    return result;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.log(`  ✗ Error: ${errorMessage}`);
+    return {
+      package: displayName,
+      version: "",
+      path: "",
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Fetch an npm package
+ */
+async function fetchPackageInput(
+  spec: string,
+  cwd: string,
+): Promise<FetchResult> {
+  const { name, version: explicitVersion } = parsePackageSpec(spec);
+
+  console.log(`\nFetching ${name}...`);
+
+  try {
+    // Determine target version
+    let version = explicitVersion;
+
+    if (!version) {
+      // Try to detect from installed packages
+      const installedVersion = await detectInstalledVersion(name, cwd);
+      if (installedVersion) {
+        version = installedVersion;
+        console.log(`  → Detected installed version: ${version}`);
+      } else {
+        console.log(`  → No installed version found, using latest`);
+      }
+    } else {
+      console.log(`  → Using specified version: ${version}`);
+    }
+
+    // Check if already exists with the same version
+    if (packageExists(name, cwd)) {
+      const existingMeta = await readMetadata(name, cwd);
+      if (existingMeta && existingMeta.version === version) {
+        console.log(`  ✓ Already up to date (${version})`);
+        return {
+          package: name,
+          version: existingMeta.version,
+          path: existingMeta.repoDirectory
+            ? `${cwd}/opensrc/${name}/${existingMeta.repoDirectory}`
+            : `${cwd}/opensrc/${name}`,
+          success: true,
+        };
+      } else if (existingMeta) {
+        console.log(
+          `  → Updating ${existingMeta.version} → ${version || "latest"}`,
+        );
+      }
+    }
+
+    // Resolve package info from npm registry
+    console.log(`  → Resolving repository...`);
+    const resolved = await resolvePackage(name, version);
+    console.log(`  → Found: ${resolved.repoUrl}`);
+
+    if (resolved.repoDirectory) {
+      console.log(`  → Monorepo path: ${resolved.repoDirectory}`);
+    }
+
+    // Fetch the source
+    console.log(`  → Cloning at ${resolved.gitTag}...`);
+    const result = await fetchSource(resolved, cwd);
+
+    if (result.success) {
+      console.log(`  ✓ Saved to ${result.path}`);
+      if (result.error) {
+        // Warning message (e.g., tag not found)
+        console.log(`  ⚠ ${result.error}`);
+      }
+    } else {
+      console.log(`  ✗ Failed: ${result.error}`);
+    }
+
+    return result;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.log(`  ✗ Error: ${errorMessage}`);
+    return {
+      package: name,
+      version: "",
+      path: "",
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Fetch source code for one or more packages or repositories
  */
 export async function fetchCommand(
   packages: string[],
@@ -82,7 +251,10 @@ export async function fetchCommand(
   const results: FetchResult[] = [];
 
   // Check if we're allowed to modify files
-  const canModifyFiles = await checkFileModificationPermission(cwd, options.allowModifications);
+  const canModifyFiles = await checkFileModificationPermission(
+    cwd,
+    options.allowModifications,
+  );
 
   if (canModifyFiles) {
     // Ensure .gitignore has opensrc/ entry
@@ -99,82 +271,16 @@ export async function fetchCommand(
   }
 
   for (const spec of packages) {
-    const { name, version: explicitVersion } = parsePackageSpec(spec);
+    const inputType = detectInputType(spec);
 
-    console.log(`\nFetching ${name}...`);
-
-    try {
-      // Determine target version
-      let version = explicitVersion;
-
-      if (!version) {
-        // Try to detect from installed packages
-        const installedVersion = await detectInstalledVersion(name, cwd);
-        if (installedVersion) {
-          version = installedVersion;
-          console.log(`  → Detected installed version: ${version}`);
-        } else {
-          console.log(`  → No installed version found, using latest`);
-        }
-      } else {
-        console.log(`  → Using specified version: ${version}`);
-      }
-
-      // Check if already exists with the same version
-      if (packageExists(name, cwd)) {
-        const existingMeta = await readMetadata(name, cwd);
-        if (existingMeta && existingMeta.version === version) {
-          console.log(`  ✓ Already up to date (${version})`);
-          results.push({
-            package: name,
-            version: existingMeta.version,
-            path: existingMeta.repoDirectory
-              ? `${cwd}/opensrc/${name}/${existingMeta.repoDirectory}`
-              : `${cwd}/opensrc/${name}`,
-            success: true,
-          });
-          continue;
-        } else if (existingMeta) {
-          console.log(
-            `  → Updating ${existingMeta.version} → ${version || "latest"}`,
-          );
-        }
-      }
-
-      // Resolve package info from npm registry
-      console.log(`  → Resolving repository...`);
-      const resolved = await resolvePackage(name, version);
-      console.log(`  → Found: ${resolved.repoUrl}`);
-
-      if (resolved.repoDirectory) {
-        console.log(`  → Monorepo path: ${resolved.repoDirectory}`);
-      }
-
-      // Fetch the source
-      console.log(`  → Cloning at ${resolved.gitTag}...`);
-      const result = await fetchSource(resolved, cwd);
-
-      if (result.success) {
-        console.log(`  ✓ Saved to ${result.path}`);
-        if (result.error) {
-          // Warning message (e.g., tag not found)
-          console.log(`  ⚠ ${result.error}`);
-        }
-      } else {
-        console.log(`  ✗ Failed: ${result.error}`);
-      }
-
+    if (inputType === "repo") {
+      // Handle GitHub repository
+      const result = await fetchRepoInput(spec, cwd);
       results.push(result);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.log(`  ✗ Error: ${errorMessage}`);
-      results.push({
-        package: name,
-        version: "",
-        path: "",
-        success: false,
-        error: errorMessage,
-      });
+    } else {
+      // Handle npm package
+      const result = await fetchPackageInput(spec, cwd);
+      results.push(result);
     }
   }
 

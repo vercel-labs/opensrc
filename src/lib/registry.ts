@@ -1,6 +1,14 @@
-import type { RegistryResponse, ResolvedPackage } from "../types.js";
+import type { RegistryResponse, ResolvedPackage, InputType } from "../types.js";
+import { isRepoSpec } from "./repo.js";
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
+
+/**
+ * Detect whether the input is an npm package or a GitHub repo
+ */
+export function detectInputType(spec: string): InputType {
+  return isRepoSpec(spec) ? "repo" : "package";
+}
 
 /**
  * Parse a package specifier like "zod@3.22.0" into name and version

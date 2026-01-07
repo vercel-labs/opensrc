@@ -17,4 +17,3 @@ export async function confirm(question: string): Promise<boolean> {
     });
   });
 }
-

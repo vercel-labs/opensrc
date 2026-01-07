@@ -55,7 +55,11 @@ export async function writeSettings(
 ): Promise<void> {
   await ensureOpensrcDir(cwd);
   const settingsPath = getSettingsPath(cwd);
-  await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  await writeFile(
+    settingsPath,
+    JSON.stringify(settings, null, 2) + "\n",
+    "utf-8",
+  );
 }
 
 /**
@@ -80,4 +84,3 @@ export async function setFileModificationPermission(
   settings.allowFileModifications = allowed;
   await writeSettings(settings, cwd);
 }
-

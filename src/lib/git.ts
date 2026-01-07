@@ -2,7 +2,7 @@ import { simpleGit, SimpleGit } from "simple-git";
 import { rm, mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
-import type { ResolvedPackage, FetchResult } from "../types.js";
+import type { ResolvedPackage, ResolvedRepo, FetchResult } from "../types.js";
 
 const OPENSRC_DIR = "opensrc";
 
@@ -195,6 +195,156 @@ export async function fetchSource(
     success: true,
     error: cloneResult.error, // May contain a warning about tag not found
   };
+}
+
+/**
+ * Write metadata file for a fetched repository
+ */
+async function writeRepoMetadata(
+  packagePath: string,
+  resolved: ResolvedRepo,
+): Promise<void> {
+  const metadata = {
+    name: resolved.displayName,
+    version: resolved.ref,
+    repoUrl: resolved.repoUrl,
+    owner: resolved.owner,
+    repo: resolved.repo,
+    fetchedTag: resolved.ref,
+    fetchedAt: new Date().toISOString(),
+    isRepo: true,
+  };
+
+  const metadataPath = join(packagePath, ".opensrc-meta.json");
+  await writeFile(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
+}
+
+/**
+ * Clone a repository at a specific ref (branch, tag, or commit)
+ */
+async function cloneAtRef(
+  git: SimpleGit,
+  repoUrl: string,
+  targetPath: string,
+  ref: string,
+): Promise<{ success: boolean; ref?: string; error?: string }> {
+  // Try to clone with the specified ref first
+  try {
+    await git.clone(repoUrl, targetPath, [
+      "--depth",
+      "1",
+      "--branch",
+      ref,
+      "--single-branch",
+    ]);
+    return { success: true, ref };
+  } catch {
+    // Ref might be a commit or doesn't exist as a branch/tag
+    // Fall back to default branch
+  }
+
+  // Clone default branch
+  try {
+    await git.clone(repoUrl, targetPath, ["--depth", "1"]);
+    return {
+      success: true,
+      ref: "HEAD",
+      error: `Could not find ref "${ref}", cloned default branch instead`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Fetch source code for a resolved GitHub repository
+ */
+export async function fetchRepoSource(
+  resolved: ResolvedRepo,
+  cwd: string = process.cwd(),
+): Promise<FetchResult> {
+  const git = simpleGit();
+  const packagePath = getPackagePath(resolved.displayName, cwd);
+  const opensrcDir = getOpensrcDir(cwd);
+
+  // Ensure opensrc directory exists
+  if (!existsSync(opensrcDir)) {
+    await mkdir(opensrcDir, { recursive: true });
+  }
+
+  // Remove existing if present
+  if (existsSync(packagePath)) {
+    await rm(packagePath, { recursive: true, force: true });
+  }
+
+  // Clone the repository
+  const cloneResult = await cloneAtRef(
+    git,
+    resolved.repoUrl,
+    packagePath,
+    resolved.ref,
+  );
+
+  if (!cloneResult.success) {
+    return {
+      package: resolved.displayName,
+      version: resolved.ref,
+      path: packagePath,
+      success: false,
+      error: cloneResult.error,
+    };
+  }
+
+  // Remove .git directory to save space and avoid confusion
+  const gitDir = join(packagePath, ".git");
+  if (existsSync(gitDir)) {
+    await rm(gitDir, { recursive: true, force: true });
+  }
+
+  // Write metadata
+  await writeRepoMetadata(packagePath, resolved);
+
+  return {
+    package: resolved.displayName,
+    version: resolved.ref,
+    path: packagePath,
+    success: true,
+    error: cloneResult.error, // May contain a warning about ref not found
+  };
+}
+
+/**
+ * Check if a repo source already exists and get its metadata
+ */
+export async function readRepoMetadata(
+  displayName: string,
+  cwd: string = process.cwd(),
+): Promise<{
+  name: string;
+  version: string;
+  repoUrl: string;
+  owner: string;
+  repo: string;
+  fetchedTag: string;
+  fetchedAt: string;
+  isRepo: boolean;
+} | null> {
+  const packagePath = getPackagePath(displayName, cwd);
+  const metadataPath = join(packagePath, ".opensrc-meta.json");
+
+  if (!existsSync(metadataPath)) {
+    return null;
+  }
+
+  try {
+    const content = await readFile(metadataPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
 }
 
 /**

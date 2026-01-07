@@ -22,6 +22,8 @@ npx opensrc <package>
 
 ## Usage
 
+### npm Packages
+
 ```bash
 # Fetch source for a package (auto-detects version from lockfile)
 opensrc zod
@@ -31,15 +33,44 @@ opensrc zod@3.22.0
 
 # Fetch multiple packages
 opensrc react react-dom next
-
-# List fetched sources
-opensrc list
-
-# Remove a source
-opensrc remove zod
 ```
 
 Re-running `opensrc <package>` automatically updates to match your installed version—no flags needed.
+
+### GitHub Repositories
+
+You can also fetch source code directly from any public GitHub repository:
+
+```bash
+# Using github: prefix
+opensrc github:owner/repo
+
+# Using owner/repo shorthand
+opensrc facebook/react
+
+# Using full GitHub URL
+opensrc https://github.com/colinhacks/zod
+
+# Fetch a specific branch or tag
+opensrc owner/repo@v1.0.0
+opensrc owner/repo#main
+
+# Mix packages and repos
+opensrc zod facebook/react
+```
+
+GitHub repos are stored as `opensrc/owner--repo/`.
+
+### Managing Sources
+
+```bash
+# List fetched sources
+opensrc list
+
+# Remove a source (package or repo)
+opensrc remove zod
+opensrc remove owner--repo
+```
 
 ### File Modifications
 
