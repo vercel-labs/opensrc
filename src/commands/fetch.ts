@@ -8,23 +8,23 @@ import { detectInstalledVersion } from "../lib/version.js";
 import {
   fetchSource,
   fetchRepoSource,
-  packageExists,
   repoExists,
+  packageRepoExists,
   listSources,
   getPackageInfo,
   getRepoInfo,
-  getPackageRelativePath,
   getRepoRelativePath,
+  getRepoDisplayName,
 } from "../lib/git.js";
 import { ensureGitignore } from "../lib/gitignore.js";
 import { ensureTsconfigExclude } from "../lib/tsconfig.js";
-import { updateAgentsMd, updatePackageIndex } from "../lib/agents.js";
+import { updateAgentsMd, updatePackageIndex, type PackageEntry, type RepoEntry } from "../lib/agents.js";
 import {
   getFileModificationPermission,
   setFileModificationPermission,
 } from "../lib/settings.js";
 import { confirm } from "../lib/prompt.js";
-import type { FetchResult, Ecosystem } from "../types.js";
+import type { FetchResult, Registry } from "../types.js";
 
 export interface FetchOptions {
   cwd?: string;
@@ -75,10 +75,10 @@ async function checkFileModificationPermission(
 }
 
 /**
- * Get ecosystem display name
+ * Get registry display name
  */
-function getEcosystemLabel(ecosystem: Ecosystem): string {
-  switch (ecosystem) {
+function getRegistryLabel(registry: Registry): string {
+  switch (registry) {
     case "npm":
       return "npm";
     case "pypi":
@@ -162,22 +162,22 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
 }
 
 /**
- * Fetch a package from any ecosystem
+ * Fetch a package from any registry
  */
 async function fetchPackageInput(
   spec: string,
   cwd: string,
 ): Promise<FetchResult> {
   const packageSpec = parsePackageSpec(spec);
-  const { ecosystem, name } = packageSpec;
+  const { registry, name } = packageSpec;
   let { version } = packageSpec;
 
-  const ecosystemLabel = getEcosystemLabel(ecosystem);
-  console.log(`\nFetching ${name} from ${ecosystemLabel}...`);
+  const registryLabel = getRegistryLabel(registry);
+  console.log(`\nFetching ${name} from ${registryLabel}...`);
 
   try {
     // For npm, try to detect installed version if not specified
-    if (!version && ecosystem === "npm") {
+    if (!version && registry === "npm") {
       const installedVersion = await detectInstalledVersion(name, cwd);
       if (installedVersion) {
         version = installedVersion;
@@ -192,35 +192,40 @@ async function fetchPackageInput(
     }
 
     // Check if already exists with the same version
-    if (packageExists(name, cwd, ecosystem)) {
-      const existing = await getPackageInfo(name, cwd, ecosystem);
-      if (existing && existing.version === version) {
-        console.log(`  ✓ Already up to date (${version})`);
-        return {
-          package: name,
-          version: existing.version,
-          path: existing.path,
-          success: true,
-          ecosystem,
-        };
-      } else if (existing) {
-        console.log(
-          `  → Updating ${existing.version} → ${version || "latest"}`,
-        );
-      }
+    const existingPkg = await getPackageInfo(name, cwd, registry);
+    if (existingPkg && existingPkg.version === version) {
+      console.log(`  ✓ Already up to date (${version})`);
+      return {
+        package: name,
+        version: existingPkg.version,
+        path: existingPkg.path,
+        success: true,
+        registry,
+      };
+    } else if (existingPkg) {
+      console.log(
+        `  → Updating ${existingPkg.version} → ${version || "latest"}`,
+      );
     }
 
     // Resolve package info from registry
     console.log(`  → Resolving repository...`);
     const resolved = await resolvePackage({
-      ecosystem,
+      registry,
       name,
       version,
     });
+    
+    const repoDisplayName = getRepoDisplayName(resolved.repoUrl);
     console.log(`  → Found: ${resolved.repoUrl}`);
 
     if (resolved.repoDirectory) {
       console.log(`  → Monorepo path: ${resolved.repoDirectory}`);
+    }
+
+    // Check if the repo already exists (might be shared with another package)
+    if (packageRepoExists(resolved.repoUrl, cwd)) {
+      console.log(`  → Repo already cloned, checking version...`);
     }
 
     // Fetch the source
@@ -246,7 +251,7 @@ async function fetchPackageInput(
       path: "",
       success: false,
       error: errorMessage,
-      ecosystem,
+      registry,
     };
   }
 }
@@ -256,42 +261,41 @@ async function fetchPackageInput(
  */
 function mergeResults(
   existing: {
-    packages: Record<Ecosystem, Array<{ name: string; version: string; path: string; fetchedAt: string; ecosystem: Ecosystem }>>;
-    repos: Array<{ name: string; version: string; path: string; fetchedAt: string }>;
+    packages: PackageEntry[];
+    repos: RepoEntry[];
   },
   results: FetchResult[],
 ): {
-  packages: Record<Ecosystem, Array<{ name: string; version: string; path: string; fetchedAt: string; ecosystem: Ecosystem }>>;
-  repos: Array<{ name: string; version: string; path: string; fetchedAt: string }>;
+  packages: PackageEntry[];
+  repos: RepoEntry[];
 } {
   const now = new Date().toISOString();
 
   for (const result of results) {
     if (!result.success) continue;
 
-    if (result.ecosystem) {
+    if (result.registry) {
       // It's a package
-      const ecosystem = result.ecosystem;
-      const idx = existing.packages[ecosystem].findIndex(
-        (p) => p.name === result.package,
+      const idx = existing.packages.findIndex(
+        (p) => p.name === result.package && p.registry === result.registry,
       );
-      const entry = {
+      const entry: PackageEntry = {
         name: result.package,
         version: result.version,
+        registry: result.registry,
         path: result.path,
         fetchedAt: now,
-        ecosystem,
       };
 
       if (idx >= 0) {
-        existing.packages[ecosystem][idx] = entry;
+        existing.packages[idx] = entry;
       } else {
-        existing.packages[ecosystem].push(entry);
+        existing.packages.push(entry);
       }
     } else {
       // It's a repo
       const idx = existing.repos.findIndex((r) => r.name === result.package);
-      const entry = {
+      const entry: RepoEntry = {
         name: result.package,
         version: result.version,
         path: result.path,

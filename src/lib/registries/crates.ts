@@ -182,7 +182,7 @@ export async function resolveCrate(
   const gitTag = `v${resolvedVersion}`;
 
   return {
-    ecosystem: "crates",
+    registry: "crates",
     name: crateName,
     version: resolvedVersion,
     repoUrl,

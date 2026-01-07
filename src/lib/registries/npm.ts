@@ -136,7 +136,7 @@ export async function resolveNpmPackage(
   const gitTag = `v${resolvedVersion}`;
 
   return {
-    ecosystem: "npm",
+    registry: "npm",
     name: packageName,
     version: resolvedVersion,
     repoUrl: repo.url,

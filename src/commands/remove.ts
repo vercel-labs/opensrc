@@ -1,14 +1,14 @@
 import {
   removePackageSource,
   removeRepoSource,
-  packageExists,
   repoExists,
   listSources,
+  getPackageInfo,
 } from "../lib/git.js";
-import { updateAgentsMd } from "../lib/agents.js";
+import { updateAgentsMd, type PackageEntry, type RepoEntry } from "../lib/agents.js";
 import { isRepoSpec } from "../lib/repo.js";
-import { detectEcosystem } from "../lib/registries/index.js";
-import type { Ecosystem } from "../types.js";
+import { detectRegistry } from "../lib/registries/index.js";
+import type { Registry } from "../types.js";
 
 export interface RemoveOptions {
   cwd?: string;
@@ -25,12 +25,16 @@ export async function removeCommand(
   let removed = 0;
   let notFound = 0;
 
+  // Track packages and repos to update in sources.json
+  const removedPackages: Array<{ name: string; registry: Registry }> = [];
+  const removedRepos: string[] = [];
+
   for (const item of items) {
     // Check if it's a repo or package based on format
-    const isRepo = isRepoSpec(item) || item.includes("/");
+    const isRepo = isRepoSpec(item) || (item.includes("/") && !item.includes(":"));
 
-    if (isRepo && !item.includes(":")) {
-      // Try to remove as repo first (unless it has an ecosystem prefix)
+    if (isRepo) {
+      // Try to remove as repo
       // Convert formats like "vercel/vercel" to "github.com/vercel/vercel" if needed
       let displayName = item;
       if (item.split("/").length === 2 && !item.startsWith("http")) {
@@ -42,26 +46,8 @@ export async function removeCommand(
         if (repoExists(item, cwd)) {
           displayName = item;
         } else {
-          // Maybe it's a package with a / in the name (scoped)?
-          // Check all ecosystems
-          let found = false;
-          const ecosystems: Ecosystem[] = ["npm", "pypi", "crates"];
-          for (const ecosystem of ecosystems) {
-            if (packageExists(item, cwd, ecosystem)) {
-              const success = await removePackageSource(item, cwd, ecosystem);
-              if (success) {
-                console.log(`  ✓ Removed ${item} (${ecosystem})`);
-                removed++;
-                found = true;
-                break;
-              }
-            }
-          }
-
-          if (!found) {
-            console.log(`  ⚠ ${item} not found`);
-            notFound++;
-          }
+          console.log(`  ⚠ ${item} not found`);
+          notFound++;
           continue;
         }
       }
@@ -71,41 +57,47 @@ export async function removeCommand(
       if (success) {
         console.log(`  ✓ Removed ${displayName}`);
         removed++;
+        removedRepos.push(displayName);
       } else {
         console.log(`  ✗ Failed to remove ${displayName}`);
       }
     } else {
-      // Remove as package - detect ecosystem from prefix or default to npm
-      const { ecosystem, cleanSpec } = detectEcosystem(item);
+      // Remove as package - detect registry from prefix or default to npm
+      const { registry, cleanSpec } = detectRegistry(item);
 
-      if (!packageExists(cleanSpec, cwd, ecosystem)) {
-        // Try other ecosystems if default didn't work
-        let found = false;
-        const ecosystems: Ecosystem[] = ["npm", "pypi", "crates"];
-        for (const eco of ecosystems) {
-          if (eco !== ecosystem && packageExists(cleanSpec, cwd, eco)) {
-            const success = await removePackageSource(cleanSpec, cwd, eco);
-            if (success) {
-              console.log(`  ✓ Removed ${cleanSpec} (${eco})`);
-              removed++;
-              found = true;
+      // Find the package in sources
+      let pkgInfo = await getPackageInfo(cleanSpec, cwd, registry);
+      let actualRegistry = registry;
+
+      if (!pkgInfo) {
+        // Try other registries if default didn't work
+        const registries: Registry[] = ["npm", "pypi", "crates"];
+        for (const reg of registries) {
+          if (reg !== registry) {
+            pkgInfo = await getPackageInfo(cleanSpec, cwd, reg);
+            if (pkgInfo) {
+              actualRegistry = reg;
               break;
             }
           }
         }
+      }
 
-        if (!found) {
-          console.log(`  ⚠ ${cleanSpec} not found`);
-          notFound++;
-        }
+      if (!pkgInfo) {
+        console.log(`  ⚠ ${cleanSpec} not found`);
+        notFound++;
         continue;
       }
 
-      const success = await removePackageSource(cleanSpec, cwd, ecosystem);
+      const result = await removePackageSource(cleanSpec, cwd, actualRegistry);
 
-      if (success) {
-        console.log(`  ✓ Removed ${cleanSpec} (${ecosystem})`);
+      if (result.removed) {
+        console.log(`  ✓ Removed ${cleanSpec} (${actualRegistry})`);
+        if (result.repoRemoved) {
+          console.log(`    → Also removed repo (no other packages use it)`);
+        }
         removed++;
+        removedPackages.push({ name: cleanSpec, registry: actualRegistry });
       } else {
         console.log(`  ✗ Failed to remove ${cleanSpec}`);
       }
@@ -116,16 +108,23 @@ export async function removeCommand(
     `\nRemoved ${removed} source(s)${notFound > 0 ? `, ${notFound} not found` : ""}`,
   );
 
-  // Update AGENTS.md with remaining sources (or remove section if empty)
+  // Update sources.json with remaining sources
   if (removed > 0) {
-    const remainingSources = await listSources(cwd);
-    const agentsUpdated = await updateAgentsMd(remainingSources, cwd);
+    const sources = await listSources(cwd);
+    
+    // Filter out removed packages
+    const remainingPackages: PackageEntry[] = sources.packages.filter(
+      p => !removedPackages.some(rp => rp.name === p.name && rp.registry === p.registry)
+    );
+
+    // Filter out removed repos
+    const remainingRepos: RepoEntry[] = sources.repos.filter(
+      r => !removedRepos.includes(r.name)
+    );
+
+    const agentsUpdated = await updateAgentsMd({ packages: remainingPackages, repos: remainingRepos }, cwd);
     if (agentsUpdated) {
-      const totalRemaining =
-        Object.values(remainingSources.packages).reduce(
-          (sum, arr) => sum + arr.length,
-          0,
-        ) + remainingSources.repos.length;
+      const totalRemaining = remainingPackages.length + remainingRepos.length;
       if (totalRemaining === 0) {
         console.log("✓ Removed opensrc section from AGENTS.md");
       } else {

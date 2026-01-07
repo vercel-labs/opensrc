@@ -6,11 +6,10 @@ import type {
   ResolvedPackage,
   ResolvedRepo,
   FetchResult,
-  Ecosystem,
+  Registry,
 } from "../types.js";
 
 const OPENSRC_DIR = "opensrc";
-const PACKAGES_DIR = "packages";
 const REPOS_DIR = "repos";
 const SOURCES_FILE = "sources.json";
 
@@ -22,17 +21,6 @@ export function getOpensrcDir(cwd: string = process.cwd()): string {
 }
 
 /**
- * Get the packages directory path for a specific ecosystem
- */
-export function getPackagesDir(
-  cwd: string = process.cwd(),
-  ecosystem?: Ecosystem,
-): string {
-  const base = join(getOpensrcDir(cwd), PACKAGES_DIR);
-  return ecosystem ? join(base, ecosystem) : base;
-}
-
-/**
  * Get the repos directory path
  */
 export function getReposDir(cwd: string = process.cwd()): string {
@@ -40,24 +28,30 @@ export function getReposDir(cwd: string = process.cwd()): string {
 }
 
 /**
- * Get the path where a package's source will be stored
+ * Extract host/owner/repo from a git URL
  */
-export function getPackagePath(
-  packageName: string,
-  cwd: string = process.cwd(),
-  ecosystem: Ecosystem = "npm",
-): string {
-  return join(getPackagesDir(cwd, ecosystem), packageName);
-}
+export function parseRepoUrl(url: string): { host: string; owner: string; repo: string } | null {
+  // Handle HTTPS URLs: https://github.com/owner/repo
+  const httpsMatch = url.match(/https?:\/\/([^/]+)\/([^/]+)\/([^/]+)/);
+  if (httpsMatch) {
+    return {
+      host: httpsMatch[1],
+      owner: httpsMatch[2],
+      repo: httpsMatch[3].replace(/\.git$/, ""),
+    };
+  }
 
-/**
- * Get the relative path for a package (for sources.json)
- */
-export function getPackageRelativePath(
-  packageName: string,
-  ecosystem: Ecosystem = "npm",
-): string {
-  return `${PACKAGES_DIR}/${ecosystem}/${packageName}`;
+  // Handle SSH URLs: git@github.com:owner/repo.git
+  const sshMatch = url.match(/git@([^:]+):([^/]+)\/(.+)/);
+  if (sshMatch) {
+    return {
+      host: sshMatch[1],
+      owner: sshMatch[2],
+      repo: sshMatch[3].replace(/\.git$/, ""),
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -78,11 +72,35 @@ export function getRepoRelativePath(displayName: string): string {
 }
 
 /**
+ * Get repo display name from URL
+ */
+export function getRepoDisplayName(repoUrl: string): string | null {
+  const parsed = parseRepoUrl(repoUrl);
+  if (!parsed) return null;
+  return `${parsed.host}/${parsed.owner}/${parsed.repo}`;
+}
+
+interface PackageEntry {
+  name: string;
+  version: string;
+  registry: Registry;
+  path: string;
+  fetchedAt: string;
+}
+
+interface RepoEntry {
+  name: string;
+  version: string;
+  path: string;
+  fetchedAt: string;
+}
+
+/**
  * Read the sources.json file
  */
 async function readSourcesJson(cwd: string): Promise<{
-  packages?: Record<string, Array<{ name: string; version: string; path: string; fetchedAt: string }>>;
-  repos?: Array<{ name: string; version: string; path: string; fetchedAt: string }>;
+  packages?: PackageEntry[];
+  repos?: RepoEntry[];
 } | null> {
   const sourcesPath = join(getOpensrcDir(cwd), SOURCES_FILE);
   
@@ -99,17 +117,6 @@ async function readSourcesJson(cwd: string): Promise<{
 }
 
 /**
- * Check if a package source already exists
- */
-export function packageExists(
-  packageName: string,
-  cwd: string = process.cwd(),
-  ecosystem: Ecosystem = "npm",
-): boolean {
-  return existsSync(getPackagePath(packageName, cwd, ecosystem));
-}
-
-/**
  * Check if a repo source already exists
  */
 export function repoExists(
@@ -120,19 +127,31 @@ export function repoExists(
 }
 
 /**
+ * Check if a package's repo already exists
+ */
+export function packageRepoExists(
+  repoUrl: string,
+  cwd: string = process.cwd(),
+): boolean {
+  const displayName = getRepoDisplayName(repoUrl);
+  if (!displayName) return false;
+  return repoExists(displayName, cwd);
+}
+
+/**
  * Get package info from sources.json
  */
 export async function getPackageInfo(
   packageName: string,
   cwd: string = process.cwd(),
-  ecosystem: Ecosystem = "npm",
-): Promise<{ name: string; version: string; path: string; fetchedAt: string } | null> {
+  registry: Registry = "npm",
+): Promise<PackageEntry | null> {
   const sources = await readSourcesJson(cwd);
-  if (!sources?.packages?.[ecosystem]) {
+  if (!sources?.packages) {
     return null;
   }
   
-  return sources.packages[ecosystem].find(p => p.name === packageName) || null;
+  return sources.packages.find(p => p.name === packageName && p.registry === registry) || null;
 }
 
 /**
@@ -141,7 +160,7 @@ export async function getPackageInfo(
 export async function getRepoInfo(
   displayName: string,
   cwd: string = process.cwd(),
-): Promise<{ name: string; version: string; path: string; fetchedAt: string } | null> {
+): Promise<RepoEntry | null> {
   const sources = await readSourcesJson(cwd);
   if (!sources?.repos) {
     return null;
@@ -238,21 +257,35 @@ export async function fetchSource(
   cwd: string = process.cwd(),
 ): Promise<FetchResult> {
   const git = simpleGit();
-  const packagePath = getPackagePath(resolved.name, cwd, resolved.ecosystem);
-  const packagesDir = getPackagesDir(cwd, resolved.ecosystem);
-
-  // Ensure packages directory exists
-  if (!existsSync(packagesDir)) {
-    await mkdir(packagesDir, { recursive: true });
+  
+  // Get repo display name from URL
+  const repoDisplayName = getRepoDisplayName(resolved.repoUrl);
+  if (!repoDisplayName) {
+    return {
+      package: resolved.name,
+      version: resolved.version,
+      path: "",
+      success: false,
+      error: `Could not parse repository URL: ${resolved.repoUrl}`,
+      registry: resolved.registry,
+    };
   }
 
-  // Remove existing if present
-  if (existsSync(packagePath)) {
-    await rm(packagePath, { recursive: true, force: true });
+  const repoPath = getRepoPath(repoDisplayName, cwd);
+  const reposDir = getReposDir(cwd);
+
+  // Ensure repos directory exists
+  if (!existsSync(reposDir)) {
+    await mkdir(reposDir, { recursive: true });
   }
 
-  // Ensure parent directory exists for scoped packages
-  const parentDir = join(packagePath, "..");
+  // Remove existing if present (re-fetch at potentially different version)
+  if (existsSync(repoPath)) {
+    await rm(repoPath, { recursive: true, force: true });
+  }
+
+  // Ensure parent directories exist (for host/owner structure)
+  const parentDir = join(repoPath, "..");
   if (!existsSync(parentDir)) {
     await mkdir(parentDir, { recursive: true });
   }
@@ -261,7 +294,7 @@ export async function fetchSource(
   const cloneResult = await cloneAtTag(
     git,
     resolved.repoUrl,
-    packagePath,
+    repoPath,
     resolved.version,
   );
 
@@ -269,21 +302,21 @@ export async function fetchSource(
     return {
       package: resolved.name,
       version: resolved.version,
-      path: getPackageRelativePath(resolved.name, resolved.ecosystem),
+      path: getRepoRelativePath(repoDisplayName),
       success: false,
       error: cloneResult.error,
-      ecosystem: resolved.ecosystem,
+      registry: resolved.registry,
     };
   }
 
   // Remove .git directory to save space and avoid confusion
-  const gitDir = join(packagePath, ".git");
+  const gitDir = join(repoPath, ".git");
   if (existsSync(gitDir)) {
     await rm(gitDir, { recursive: true, force: true });
   }
 
-  // Determine the actual source path (for monorepos)
-  let relativePath = getPackageRelativePath(resolved.name, resolved.ecosystem);
+  // Determine the actual source path (for monorepos, include subdirectory)
+  let relativePath = getRepoRelativePath(repoDisplayName);
   if (resolved.repoDirectory) {
     relativePath = `${relativePath}/${resolved.repoDirectory}`;
   }
@@ -294,7 +327,7 @@ export async function fetchSource(
     path: relativePath,
     success: true,
     error: cloneResult.error,
-    ecosystem: resolved.ecosystem,
+    registry: resolved.registry,
   };
 }
 
@@ -359,39 +392,58 @@ export async function fetchRepoSource(
 }
 
 /**
- * Remove source code for a package
+ * Extract the repo path from a full path (removes any monorepo subdirectory)
+ * e.g., "repos/github.com/owner/repo/packages/sub" -> "repos/github.com/owner/repo"
+ */
+function extractRepoPath(fullPath: string): string {
+  const parts = fullPath.split("/");
+  // repos/host/owner/repo = 4 parts minimum
+  if (parts.length >= 4 && parts[0] === "repos") {
+    return parts.slice(0, 4).join("/");
+  }
+  return fullPath;
+}
+
+/**
+ * Remove source code for a package (removes its repo if no other packages use it)
  */
 export async function removePackageSource(
   packageName: string,
   cwd: string = process.cwd(),
-  ecosystem: Ecosystem = "npm",
-): Promise<boolean> {
-  const packagePath = getPackagePath(packageName, cwd, ecosystem);
-
-  if (!existsSync(packagePath)) {
-    return false;
+  registry: Registry = "npm",
+): Promise<{ removed: boolean; repoRemoved: boolean }> {
+  const sources = await readSourcesJson(cwd);
+  if (!sources?.packages) {
+    return { removed: false, repoRemoved: false };
   }
 
-  await rm(packagePath, { recursive: true, force: true });
+  const pkg = sources.packages.find(p => p.name === packageName && p.registry === registry);
+  if (!pkg) {
+    return { removed: false, repoRemoved: false };
+  }
 
-  // Clean up empty parent directories (for scoped packages)
-  if (packageName.startsWith("@")) {
-    const scopeDir = join(
-      getPackagesDir(cwd, ecosystem),
-      packageName.split("/")[0],
-    );
-    try {
-      const { readdir } = await import("fs/promises");
-      const contents = await readdir(scopeDir);
-      if (contents.length === 0) {
-        await rm(scopeDir, { recursive: true, force: true });
-      }
-    } catch {
-      // Ignore errors cleaning up scope dir
+  const pkgRepoPath = extractRepoPath(pkg.path);
+
+  // Check if other packages use the same repo
+  const otherPackagesUsingSameRepo = sources.packages.filter(
+    p => extractRepoPath(p.path) === pkgRepoPath && !(p.name === packageName && p.registry === registry)
+  );
+
+  let repoRemoved = false;
+
+  // Only remove the repo if no other packages use it
+  if (otherPackagesUsingSameRepo.length === 0) {
+    const repoPath = join(getOpensrcDir(cwd), pkgRepoPath);
+    if (existsSync(repoPath)) {
+      await rm(repoPath, { recursive: true, force: true });
+      repoRemoved = true;
+
+      // Clean up empty parent directories
+      await cleanupEmptyParentDirs(pkgRepoPath, cwd);
     }
   }
 
-  return true;
+  return { removed: true, repoRemoved };
 }
 
 /**
@@ -409,36 +461,43 @@ export async function removeRepoSource(
 
   await rm(repoPath, { recursive: true, force: true });
 
-  // Clean up empty parent directories (host/owner)
-  const parts = displayName.split("/");
-  if (parts.length === 3) {
-    const { readdir } = await import("fs/promises");
-    const reposDir = getReposDir(cwd);
-
-    // Try to clean up owner directory
-    const ownerDir = join(reposDir, parts[0], parts[1]);
-    try {
-      const ownerContents = await readdir(ownerDir);
-      if (ownerContents.length === 0) {
-        await rm(ownerDir, { recursive: true, force: true });
-      }
-    } catch {
-      // Ignore errors
-    }
-
-    // Try to clean up host directory
-    const hostDir = join(reposDir, parts[0]);
-    try {
-      const hostContents = await readdir(hostDir);
-      if (hostContents.length === 0) {
-        await rm(hostDir, { recursive: true, force: true });
-      }
-    } catch {
-      // Ignore errors
-    }
-  }
+  // Clean up empty parent directories
+  await cleanupEmptyParentDirs(getRepoRelativePath(displayName), cwd);
 
   return true;
+}
+
+/**
+ * Clean up empty parent directories after removing a repo
+ */
+async function cleanupEmptyParentDirs(relativePath: string, cwd: string): Promise<void> {
+  const parts = relativePath.split("/");
+  if (parts.length < 4) return; // repos/host/owner/repo - need at least 4 parts
+
+  const { readdir } = await import("fs/promises");
+  const opensrcDir = getOpensrcDir(cwd);
+
+  // Try to clean up owner directory (repos/host/owner)
+  const ownerDir = join(opensrcDir, parts[0], parts[1], parts[2]);
+  try {
+    const ownerContents = await readdir(ownerDir);
+    if (ownerContents.length === 0) {
+      await rm(ownerDir, { recursive: true, force: true });
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Try to clean up host directory (repos/host)
+  const hostDir = join(opensrcDir, parts[0], parts[1]);
+  try {
+    const hostContents = await readdir(hostDir);
+    if (hostContents.length === 0) {
+      await rm(hostDir, { recursive: true, force: true });
+    }
+  } catch {
+    // Ignore errors
+  }
 }
 
 /**
@@ -448,75 +507,21 @@ export async function removeSource(
   packageName: string,
   cwd: string = process.cwd(),
 ): Promise<boolean> {
-  return removePackageSource(packageName, cwd, "npm");
+  const result = await removePackageSource(packageName, cwd, "npm");
+  return result.removed;
 }
 
 /**
  * List all fetched sources from sources.json
  */
 export async function listSources(cwd: string = process.cwd()): Promise<{
-  packages: Record<
-    Ecosystem,
-    Array<{
-      name: string;
-      version: string;
-      path: string;
-      fetchedAt: string;
-      ecosystem: Ecosystem;
-    }>
-  >;
-  repos: Array<{
-    name: string;
-    version: string;
-    path: string;
-    fetchedAt: string;
-  }>;
+  packages: PackageEntry[];
+  repos: RepoEntry[];
 }> {
   const sources = await readSourcesJson(cwd);
   
-  const result: {
-    packages: Record<Ecosystem, Array<{
-      name: string;
-      version: string;
-      path: string;
-      fetchedAt: string;
-      ecosystem: Ecosystem;
-    }>>;
-    repos: Array<{
-      name: string;
-      version: string;
-      path: string;
-      fetchedAt: string;
-    }>;
-  } = {
-    packages: {
-      npm: [],
-      pypi: [],
-      crates: [],
-    },
-    repos: [],
+  return {
+    packages: sources?.packages || [],
+    repos: sources?.repos || [],
   };
-
-  if (!sources) {
-    return result;
-  }
-
-  // Map packages with ecosystem
-  if (sources.packages) {
-    for (const ecosystem of ["npm", "pypi", "crates"] as Ecosystem[]) {
-      if (sources.packages[ecosystem]) {
-        result.packages[ecosystem] = sources.packages[ecosystem].map(p => ({
-          ...p,
-          ecosystem,
-        }));
-      }
-    }
-  }
-
-  // Copy repos
-  if (sources.repos) {
-    result.repos = sources.repos;
-  }
-
-  return result;
 }

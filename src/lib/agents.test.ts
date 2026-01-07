@@ -111,13 +111,15 @@ describe("ensureAgentsMd", () => {
 describe("updatePackageIndex", () => {
   it("creates sources.json with packages", async () => {
     const sources = {
-      packages: {
-        npm: [
-          { name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01T00:00:00.000Z", ecosystem: "npm" as const },
-        ],
-        pypi: [],
-        crates: [],
-      },
+      packages: [
+        {
+          name: "zod",
+          version: "3.22.0",
+          registry: "npm" as const,
+          path: "repos/github.com/colinhacks/zod",
+          fetchedAt: "2024-01-01T00:00:00.000Z",
+        },
+      ],
       repos: [],
     };
 
@@ -125,13 +127,14 @@ describe("updatePackageIndex", () => {
 
     expect(existsSync(SOURCES_FILE)).toBe(true);
     const content = JSON.parse(await readFile(SOURCES_FILE, "utf-8"));
-    expect(content.packages.npm).toHaveLength(1);
-    expect(content.packages.npm[0].name).toBe("zod");
+    expect(content.packages).toHaveLength(1);
+    expect(content.packages[0].name).toBe("zod");
+    expect(content.packages[0].registry).toBe("npm");
   });
 
   it("creates sources.json with repos", async () => {
     const sources = {
-      packages: { npm: [], pypi: [], crates: [] },
+      packages: [],
       repos: [
         { name: "github.com/vercel/ai", version: "main", path: "repos/github.com/vercel/ai", fetchedAt: "2024-01-01T00:00:00.000Z" },
       ],
@@ -144,33 +147,48 @@ describe("updatePackageIndex", () => {
     expect(content.repos[0].name).toBe("github.com/vercel/ai");
   });
 
-  it("removes empty ecosystem arrays from output", async () => {
+  it("omits packages key if no packages", async () => {
     const sources = {
-      packages: {
-        npm: [
-          { name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01T00:00:00.000Z", ecosystem: "npm" as const },
-        ],
-        pypi: [],
-        crates: [],
-      },
+      packages: [],
+      repos: [
+        { name: "github.com/vercel/ai", version: "main", path: "repos/github.com/vercel/ai", fetchedAt: "2024-01-01T00:00:00.000Z" },
+      ],
+    };
+
+    await updatePackageIndex(sources, TEST_DIR);
+
+    const content = JSON.parse(await readFile(SOURCES_FILE, "utf-8"));
+    expect(content.packages).toBeUndefined();
+    expect(content.repos).toBeDefined();
+  });
+
+  it("omits repos key if no repos", async () => {
+    const sources = {
+      packages: [
+        {
+          name: "zod",
+          version: "3.22.0",
+          registry: "npm" as const,
+          path: "repos/github.com/colinhacks/zod",
+          fetchedAt: "2024-01-01T00:00:00.000Z",
+        },
+      ],
       repos: [],
     };
 
     await updatePackageIndex(sources, TEST_DIR);
 
     const content = JSON.parse(await readFile(SOURCES_FILE, "utf-8"));
-    expect(content.packages.npm).toBeDefined();
-    expect(content.packages.pypi).toBeUndefined();
-    expect(content.packages.crates).toBeUndefined();
+    expect(content.packages).toBeDefined();
     expect(content.repos).toBeUndefined();
   });
 
   it("removes sources.json if no sources", async () => {
     // First create a sources.json
-    await writeFile(SOURCES_FILE, JSON.stringify({ packages: { npm: [] }, repos: [] }));
+    await writeFile(SOURCES_FILE, JSON.stringify({ packages: [], repos: [] }));
 
     const sources = {
-      packages: { npm: [], pypi: [], crates: [] },
+      packages: [],
       repos: [],
     };
 
@@ -181,13 +199,15 @@ describe("updatePackageIndex", () => {
 
   it("includes updatedAt timestamp", async () => {
     const sources = {
-      packages: {
-        npm: [
-          { name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01T00:00:00.000Z", ecosystem: "npm" as const },
-        ],
-        pypi: [],
-        crates: [],
-      },
+      packages: [
+        {
+          name: "zod",
+          version: "3.22.0",
+          registry: "npm" as const,
+          path: "repos/github.com/colinhacks/zod",
+          fetchedAt: "2024-01-01T00:00:00.000Z",
+        },
+      ],
       repos: [],
     };
 
@@ -202,13 +222,15 @@ describe("updatePackageIndex", () => {
 describe("updateAgentsMd", () => {
   it("updates both sources.json and AGENTS.md", async () => {
     const sources = {
-      packages: {
-        npm: [
-          { name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01T00:00:00.000Z", ecosystem: "npm" as const },
-        ],
-        pypi: [],
-        crates: [],
-      },
+      packages: [
+        {
+          name: "zod",
+          version: "3.22.0",
+          registry: "npm" as const,
+          path: "repos/github.com/colinhacks/zod",
+          fetchedAt: "2024-01-01T00:00:00.000Z",
+        },
+      ],
       repos: [],
     };
 
@@ -220,7 +242,7 @@ describe("updateAgentsMd", () => {
 
   it("does not create AGENTS.md if no sources", async () => {
     const sources = {
-      packages: { npm: [], pypi: [], crates: [] },
+      packages: [],
       repos: [],
     };
 
@@ -272,4 +294,3 @@ describe("removeOpensrcSection", () => {
     expect(content).not.toMatch(/\n{3,}/);
   });
 });
-

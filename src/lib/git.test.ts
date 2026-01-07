@@ -4,14 +4,13 @@ import { join } from "path";
 import { existsSync } from "fs";
 import {
   getOpensrcDir,
-  getPackagesDir,
   getReposDir,
-  getPackagePath,
-  getPackageRelativePath,
   getRepoPath,
   getRepoRelativePath,
-  packageExists,
+  parseRepoUrl,
+  getRepoDisplayName,
   repoExists,
+  packageRepoExists,
   getPackageInfo,
   getRepoInfo,
   listSources,
@@ -43,71 +42,9 @@ describe("path helpers", () => {
     });
   });
 
-  describe("getPackagesDir", () => {
-    it("returns packages directory without ecosystem", () => {
-      expect(getPackagesDir("/project")).toBe("/project/opensrc/packages");
-    });
-
-    it("returns ecosystem-specific directory", () => {
-      expect(getPackagesDir("/project", "npm")).toBe("/project/opensrc/packages/npm");
-      expect(getPackagesDir("/project", "pypi")).toBe("/project/opensrc/packages/pypi");
-      expect(getPackagesDir("/project", "crates")).toBe("/project/opensrc/packages/crates");
-    });
-  });
-
   describe("getReposDir", () => {
     it("returns repos directory path", () => {
       expect(getReposDir("/project")).toBe("/project/opensrc/repos");
-    });
-  });
-
-  describe("getPackagePath", () => {
-    it("returns full path for npm package", () => {
-      expect(getPackagePath("zod", "/project", "npm")).toBe(
-        "/project/opensrc/packages/npm/zod",
-      );
-    });
-
-    it("returns full path for pypi package", () => {
-      expect(getPackagePath("requests", "/project", "pypi")).toBe(
-        "/project/opensrc/packages/pypi/requests",
-      );
-    });
-
-    it("returns full path for crates package", () => {
-      expect(getPackagePath("serde", "/project", "crates")).toBe(
-        "/project/opensrc/packages/crates/serde",
-      );
-    });
-
-    it("handles scoped npm packages", () => {
-      expect(getPackagePath("@babel/core", "/project", "npm")).toBe(
-        "/project/opensrc/packages/npm/@babel/core",
-      );
-    });
-
-    it("defaults to npm ecosystem", () => {
-      expect(getPackagePath("zod", "/project")).toBe(
-        "/project/opensrc/packages/npm/zod",
-      );
-    });
-  });
-
-  describe("getPackageRelativePath", () => {
-    it("returns relative path for npm package", () => {
-      expect(getPackageRelativePath("zod", "npm")).toBe("packages/npm/zod");
-    });
-
-    it("returns relative path for pypi package", () => {
-      expect(getPackageRelativePath("requests", "pypi")).toBe("packages/pypi/requests");
-    });
-
-    it("returns relative path for scoped package", () => {
-      expect(getPackageRelativePath("@babel/core", "npm")).toBe("packages/npm/@babel/core");
-    });
-
-    it("defaults to npm ecosystem", () => {
-      expect(getPackageRelativePath("zod")).toBe("packages/npm/zod");
     });
   });
 
@@ -134,28 +71,63 @@ describe("path helpers", () => {
   });
 });
 
-describe("existence checks", () => {
-  describe("packageExists", () => {
-    it("returns false if package does not exist", () => {
-      expect(packageExists("zod", TEST_DIR, "npm")).toBe(false);
-    });
-
-    it("returns true if package exists", async () => {
-      const packageDir = join(OPENSRC_DIR, "packages", "npm", "zod");
-      await mkdir(packageDir, { recursive: true });
-
-      expect(packageExists("zod", TEST_DIR, "npm")).toBe(true);
-    });
-
-    it("checks correct ecosystem", async () => {
-      const npmDir = join(OPENSRC_DIR, "packages", "npm", "pkg");
-      await mkdir(npmDir, { recursive: true });
-
-      expect(packageExists("pkg", TEST_DIR, "npm")).toBe(true);
-      expect(packageExists("pkg", TEST_DIR, "pypi")).toBe(false);
+describe("parseRepoUrl", () => {
+  it("parses HTTPS GitHub URL", () => {
+    expect(parseRepoUrl("https://github.com/vercel/ai")).toEqual({
+      host: "github.com",
+      owner: "vercel",
+      repo: "ai",
     });
   });
 
+  it("parses HTTPS URL with .git suffix", () => {
+    expect(parseRepoUrl("https://github.com/vercel/ai.git")).toEqual({
+      host: "github.com",
+      owner: "vercel",
+      repo: "ai",
+    });
+  });
+
+  it("parses HTTPS GitLab URL", () => {
+    expect(parseRepoUrl("https://gitlab.com/owner/repo")).toEqual({
+      host: "gitlab.com",
+      owner: "owner",
+      repo: "repo",
+    });
+  });
+
+  it("parses SSH URL", () => {
+    expect(parseRepoUrl("git@github.com:vercel/ai.git")).toEqual({
+      host: "github.com",
+      owner: "vercel",
+      repo: "ai",
+    });
+  });
+
+  it("returns null for invalid URL", () => {
+    expect(parseRepoUrl("invalid")).toBeNull();
+  });
+});
+
+describe("getRepoDisplayName", () => {
+  it("extracts display name from HTTPS URL", () => {
+    expect(getRepoDisplayName("https://github.com/vercel/ai")).toBe(
+      "github.com/vercel/ai",
+    );
+  });
+
+  it("extracts display name from SSH URL", () => {
+    expect(getRepoDisplayName("git@github.com:colinhacks/zod.git")).toBe(
+      "github.com/colinhacks/zod",
+    );
+  });
+
+  it("returns null for invalid URL", () => {
+    expect(getRepoDisplayName("invalid")).toBeNull();
+  });
+});
+
+describe("existence checks", () => {
   describe("repoExists", () => {
     it("returns false if repo does not exist", () => {
       expect(repoExists("github.com/vercel/ai", TEST_DIR)).toBe(false);
@@ -166,6 +138,23 @@ describe("existence checks", () => {
       await mkdir(repoDir, { recursive: true });
 
       expect(repoExists("github.com/vercel/ai", TEST_DIR)).toBe(true);
+    });
+  });
+
+  describe("packageRepoExists", () => {
+    it("returns false if repo does not exist", () => {
+      expect(packageRepoExists("https://github.com/vercel/ai", TEST_DIR)).toBe(false);
+    });
+
+    it("returns true if repo exists", async () => {
+      const repoDir = join(OPENSRC_DIR, "repos", "github.com", "vercel", "ai");
+      await mkdir(repoDir, { recursive: true });
+
+      expect(packageRepoExists("https://github.com/vercel/ai", TEST_DIR)).toBe(true);
+    });
+
+    it("returns false for invalid URL", () => {
+      expect(packageRepoExists("invalid", TEST_DIR)).toBe(false);
     });
   });
 });
@@ -179,7 +168,7 @@ describe("sources.json reading", () => {
     it("returns null if package not in sources.json", async () => {
       await writeFile(
         join(OPENSRC_DIR, "sources.json"),
-        JSON.stringify({ packages: { npm: [] } }),
+        JSON.stringify({ packages: [] }),
       );
 
       expect(await getPackageInfo("zod", TEST_DIR, "npm")).toBeNull();
@@ -189,9 +178,13 @@ describe("sources.json reading", () => {
       await writeFile(
         join(OPENSRC_DIR, "sources.json"),
         JSON.stringify({
-          packages: {
-            npm: [{ name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01" }],
-          },
+          packages: [{
+            name: "zod",
+            version: "3.22.0",
+            registry: "npm",
+            path: "repos/github.com/colinhacks/zod",
+            fetchedAt: "2024-01-01",
+          }],
         }),
       );
 
@@ -199,18 +192,23 @@ describe("sources.json reading", () => {
       expect(info).toEqual({
         name: "zod",
         version: "3.22.0",
-        path: "packages/npm/zod",
+        registry: "npm",
+        path: "repos/github.com/colinhacks/zod",
         fetchedAt: "2024-01-01",
       });
     });
 
-    it("returns null for wrong ecosystem", async () => {
+    it("returns null for wrong registry", async () => {
       await writeFile(
         join(OPENSRC_DIR, "sources.json"),
         JSON.stringify({
-          packages: {
-            npm: [{ name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01" }],
-          },
+          packages: [{
+            name: "zod",
+            version: "3.22.0",
+            registry: "npm",
+            path: "repos/github.com/colinhacks/zod",
+            fetchedAt: "2024-01-01",
+          }],
         }),
       );
 
@@ -254,7 +252,7 @@ describe("sources.json reading", () => {
     it("returns empty if sources.json does not exist", async () => {
       const sources = await listSources(TEST_DIR);
       expect(sources).toEqual({
-        packages: { npm: [], pypi: [], crates: [] },
+        packages: [],
         repos: [],
       });
     });
@@ -263,21 +261,19 @@ describe("sources.json reading", () => {
       await writeFile(
         join(OPENSRC_DIR, "sources.json"),
         JSON.stringify({
-          packages: {
-            npm: [{ name: "zod", version: "3.22.0", path: "packages/npm/zod", fetchedAt: "2024-01-01" }],
-            pypi: [{ name: "requests", version: "2.31.0", path: "packages/pypi/requests", fetchedAt: "2024-01-01" }],
-          },
+          packages: [
+            { name: "zod", version: "3.22.0", registry: "npm", path: "repos/github.com/colinhacks/zod", fetchedAt: "2024-01-01" },
+            { name: "requests", version: "2.31.0", registry: "pypi", path: "repos/github.com/psf/requests", fetchedAt: "2024-01-01" },
+          ],
           repos: [{ name: "github.com/vercel/ai", version: "main", path: "repos/github.com/vercel/ai", fetchedAt: "2024-01-01" }],
         }),
       );
 
       const sources = await listSources(TEST_DIR);
 
-      expect(sources.packages.npm).toHaveLength(1);
-      expect(sources.packages.npm[0].ecosystem).toBe("npm");
-      expect(sources.packages.pypi).toHaveLength(1);
-      expect(sources.packages.pypi[0].ecosystem).toBe("pypi");
-      expect(sources.packages.crates).toHaveLength(0);
+      expect(sources.packages).toHaveLength(2);
+      expect(sources.packages[0].registry).toBe("npm");
+      expect(sources.packages[1].registry).toBe("pypi");
       expect(sources.repos).toHaveLength(1);
     });
   });
@@ -285,45 +281,65 @@ describe("sources.json reading", () => {
 
 describe("removal functions", () => {
   describe("removePackageSource", () => {
-    it("returns false if package does not exist", async () => {
+    it("returns removed:false if package not in sources", async () => {
       const result = await removePackageSource("zod", TEST_DIR, "npm");
-      expect(result).toBe(false);
+      expect(result.removed).toBe(false);
+      expect(result.repoRemoved).toBe(false);
     });
 
-    it("removes package directory", async () => {
-      const packageDir = join(OPENSRC_DIR, "packages", "npm", "zod");
-      await mkdir(packageDir, { recursive: true });
-      await writeFile(join(packageDir, "package.json"), "{}");
+    it("removes repo when package is the only user", async () => {
+      const repoDir = join(OPENSRC_DIR, "repos", "github.com", "colinhacks", "zod");
+      await mkdir(repoDir, { recursive: true });
+      await writeFile(join(repoDir, "package.json"), "{}");
+      await writeFile(
+        join(OPENSRC_DIR, "sources.json"),
+        JSON.stringify({
+          packages: [{
+            name: "zod",
+            version: "3.22.0",
+            registry: "npm",
+            path: "repos/github.com/colinhacks/zod",
+            fetchedAt: "2024-01-01",
+          }],
+        }),
+      );
 
       const result = await removePackageSource("zod", TEST_DIR, "npm");
-      expect(result).toBe(true);
-      expect(existsSync(packageDir)).toBe(false);
+      expect(result.removed).toBe(true);
+      expect(result.repoRemoved).toBe(true);
+      expect(existsSync(repoDir)).toBe(false);
     });
 
-    it("cleans up empty scope directory", async () => {
-      const scopeDir = join(OPENSRC_DIR, "packages", "npm", "@scope");
-      const packageDir = join(scopeDir, "pkg");
-      await mkdir(packageDir, { recursive: true });
-      await writeFile(join(packageDir, "package.json"), "{}");
+    it("does not remove repo when other packages share it", async () => {
+      const repoDir = join(OPENSRC_DIR, "repos", "github.com", "owner", "monorepo");
+      await mkdir(repoDir, { recursive: true });
+      await writeFile(join(repoDir, "package.json"), "{}");
+      await writeFile(
+        join(OPENSRC_DIR, "sources.json"),
+        JSON.stringify({
+          packages: [
+            {
+              name: "pkg-a",
+              version: "1.0.0",
+              registry: "npm",
+              path: "repos/github.com/owner/monorepo/packages/a",
+              fetchedAt: "2024-01-01",
+            },
+            {
+              name: "pkg-b",
+              version: "1.0.0",
+              registry: "npm",
+              path: "repos/github.com/owner/monorepo/packages/b",
+              fetchedAt: "2024-01-01",
+            },
+          ],
+        }),
+      );
 
-      await removePackageSource("@scope/pkg", TEST_DIR, "npm");
-
-      expect(existsSync(packageDir)).toBe(false);
-      expect(existsSync(scopeDir)).toBe(false);
-    });
-
-    it("does not remove scope directory if other packages exist", async () => {
-      const scopeDir = join(OPENSRC_DIR, "packages", "npm", "@scope");
-      const pkg1Dir = join(scopeDir, "pkg1");
-      const pkg2Dir = join(scopeDir, "pkg2");
-      await mkdir(pkg1Dir, { recursive: true });
-      await mkdir(pkg2Dir, { recursive: true });
-
-      await removePackageSource("@scope/pkg1", TEST_DIR, "npm");
-
-      expect(existsSync(pkg1Dir)).toBe(false);
-      expect(existsSync(scopeDir)).toBe(true);
-      expect(existsSync(pkg2Dir)).toBe(true);
+      const result = await removePackageSource("pkg-a", TEST_DIR, "npm");
+      expect(result.removed).toBe(true);
+      expect(result.repoRemoved).toBe(false);
+      expect(existsSync(repoDir)).toBe(true);
     });
   });
 
@@ -366,4 +382,3 @@ describe("removal functions", () => {
     });
   });
 });
-

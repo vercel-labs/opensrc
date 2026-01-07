@@ -1,4 +1,4 @@
-import type { Ecosystem, PackageSpec, ResolvedPackage } from "../../types.js";
+import type { Registry, PackageSpec, ResolvedPackage } from "../../types.js";
 import { parseNpmSpec, resolveNpmPackage } from "./npm.js";
 import { parsePyPISpec, resolvePyPIPackage } from "./pypi.js";
 import { parseCratesSpec, resolveCrate } from "./crates.js";
@@ -9,9 +9,9 @@ export { resolvePyPIPackage } from "./pypi.js";
 export { resolveCrate } from "./crates.js";
 
 /**
- * Ecosystem prefixes for explicit specification
+ * Registry prefixes for explicit specification
  */
-const ECOSYSTEM_PREFIXES: Record<string, Ecosystem> = {
+const REGISTRY_PREFIXES: Record<string, Registry> = {
   "npm:": "npm",
   "pypi:": "pypi",
   "pip:": "pypi",
@@ -22,20 +22,20 @@ const ECOSYSTEM_PREFIXES: Record<string, Ecosystem> = {
 };
 
 /**
- * Detect the ecosystem from a package specifier
- * Returns the ecosystem and the cleaned spec (without prefix)
+ * Detect the registry from a package specifier
+ * Returns the registry and the cleaned spec (without prefix)
  */
-export function detectEcosystem(spec: string): {
-  ecosystem: Ecosystem;
+export function detectRegistry(spec: string): {
+  registry: Registry;
   cleanSpec: string;
 } {
   const trimmed = spec.trim();
 
   // Check for explicit prefix
-  for (const [prefix, ecosystem] of Object.entries(ECOSYSTEM_PREFIXES)) {
+  for (const [prefix, registry] of Object.entries(REGISTRY_PREFIXES)) {
     if (trimmed.toLowerCase().startsWith(prefix)) {
       return {
-        ecosystem,
+        registry,
         cleanSpec: trimmed.slice(prefix.length),
       };
     }
@@ -43,21 +43,21 @@ export function detectEcosystem(spec: string): {
 
   // Default to npm if no prefix
   return {
-    ecosystem: "npm",
+    registry: "npm",
     cleanSpec: trimmed,
   };
 }
 
 /**
- * Parse a package specifier with ecosystem detection
+ * Parse a package specifier with registry detection
  */
 export function parsePackageSpec(spec: string): PackageSpec {
-  const { ecosystem, cleanSpec } = detectEcosystem(spec);
+  const { registry, cleanSpec } = detectRegistry(spec);
 
   let name: string;
   let version: string | undefined;
 
-  switch (ecosystem) {
+  switch (registry) {
     case "npm":
       ({ name, version } = parseNpmSpec(cleanSpec));
       break;
@@ -69,7 +69,7 @@ export function parsePackageSpec(spec: string): PackageSpec {
       break;
   }
 
-  return { ecosystem, name, version };
+  return { registry, name, version };
 }
 
 /**
@@ -78,9 +78,9 @@ export function parsePackageSpec(spec: string): PackageSpec {
 export async function resolvePackage(
   spec: PackageSpec,
 ): Promise<ResolvedPackage> {
-  const { ecosystem, name, version } = spec;
+  const { registry, name, version } = spec;
 
-  switch (ecosystem) {
+  switch (registry) {
     case "npm":
       return resolveNpmPackage(name, version);
     case "pypi":
@@ -98,8 +98,8 @@ export function detectInputType(
 ): "package" | "repo" {
   const trimmed = spec.trim();
 
-  // Check for explicit ecosystem prefix -> package
-  for (const prefix of Object.keys(ECOSYSTEM_PREFIXES)) {
+  // Check for explicit registry prefix -> package
+  for (const prefix of Object.keys(REGISTRY_PREFIXES)) {
     if (trimmed.toLowerCase().startsWith(prefix)) {
       return "package";
     }

@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
-import type { Ecosystem } from "../types.js";
+import type { Registry } from "../types.js";
 
 const AGENTS_FILE = "AGENTS.md";
 const OPENSRC_DIR = "opensrc";
@@ -38,17 +38,24 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 ${SECTION_END_MARKER}`;
 }
 
-export interface SourceEntry {
+export interface PackageEntry {
+  name: string;
+  version: string;
+  registry: Registry;
+  path: string;
+  fetchedAt: string;
+}
+
+export interface RepoEntry {
   name: string;
   version: string;
   path: string;
   fetchedAt: string;
-  ecosystem?: Ecosystem;
 }
 
 export interface SourcesIndex {
-  repos: SourceEntry[];
-  packages: Record<Ecosystem, SourceEntry[]>;
+  packages?: PackageEntry[];
+  repos?: RepoEntry[];
   updatedAt: string;
 }
 
@@ -57,20 +64,15 @@ export interface SourcesIndex {
  */
 export async function updatePackageIndex(
   sources: {
-    packages: Record<Ecosystem, SourceEntry[]>;
-    repos: SourceEntry[];
+    packages: PackageEntry[];
+    repos: RepoEntry[];
   },
   cwd: string = process.cwd(),
 ): Promise<void> {
   const opensrcDir = join(cwd, OPENSRC_DIR);
   const sourcesPath = join(opensrcDir, SOURCES_FILE);
 
-  const totalPackages = Object.values(sources.packages).reduce(
-    (sum, arr) => sum + arr.length,
-    0,
-  );
-
-  if (totalPackages === 0 && sources.repos.length === 0) {
+  if (sources.packages.length === 0 && sources.repos.length === 0) {
     // Remove index file if no sources
     if (existsSync(sourcesPath)) {
       const { rm } = await import("fs/promises");
@@ -80,59 +82,29 @@ export async function updatePackageIndex(
   }
 
   const index: SourcesIndex = {
-    repos: sources.repos.map((r) => ({
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (sources.packages.length > 0) {
+    index.packages = sources.packages.map((p) => ({
+      name: p.name,
+      version: p.version,
+      registry: p.registry,
+      path: p.path,
+      fetchedAt: p.fetchedAt,
+    }));
+  }
+
+  if (sources.repos.length > 0) {
+    index.repos = sources.repos.map((r) => ({
       name: r.name,
       version: r.version,
       path: r.path,
       fetchedAt: r.fetchedAt,
-    })),
-    packages: {
-      npm: sources.packages.npm.map((p) => ({
-        name: p.name,
-        version: p.version,
-        path: p.path,
-        fetchedAt: p.fetchedAt,
-      })),
-      pypi: sources.packages.pypi.map((p) => ({
-        name: p.name,
-        version: p.version,
-        path: p.path,
-        fetchedAt: p.fetchedAt,
-      })),
-      crates: sources.packages.crates.map((p) => ({
-        name: p.name,
-        version: p.version,
-        path: p.path,
-        fetchedAt: p.fetchedAt,
-      })),
-    },
-    updatedAt: new Date().toISOString(),
-  };
-
-  // Remove empty ecosystem arrays from output for cleaner JSON
-  const cleanIndex: Record<string, unknown> = {
-    repos: index.repos,
-    packages: {} as Record<string, SourceEntry[]>,
-    updatedAt: index.updatedAt,
-  };
-
-  for (const [eco, packages] of Object.entries(index.packages)) {
-    if (packages.length > 0) {
-      (cleanIndex.packages as Record<string, SourceEntry[]>)[eco] = packages;
-    }
+    }));
   }
 
-  // If no packages at all, remove the packages key
-  if (Object.keys(cleanIndex.packages as object).length === 0) {
-    delete cleanIndex.packages;
-  }
-
-  // If no repos, remove the repos key
-  if ((cleanIndex.repos as SourceEntry[]).length === 0) {
-    delete cleanIndex.repos;
-  }
-
-  await writeFile(sourcesPath, JSON.stringify(cleanIndex, null, 2), "utf-8");
+  await writeFile(sourcesPath, JSON.stringify(index, null, 2), "utf-8");
 }
 
 /**
@@ -228,8 +200,8 @@ ${newSection}
  */
 export async function updateAgentsMd(
   sources: {
-    packages: Record<Ecosystem, SourceEntry[]>;
-    repos: SourceEntry[];
+    packages: PackageEntry[];
+    repos: RepoEntry[];
   },
   cwd: string = process.cwd(),
 ): Promise<boolean> {
@@ -237,12 +209,7 @@ export async function updateAgentsMd(
   await updatePackageIndex(sources, cwd);
 
   // Add or update section in AGENTS.md if there are sources
-  const totalPackages = Object.values(sources.packages).reduce(
-    (sum, arr) => sum + arr.length,
-    0,
-  );
-
-  if (totalPackages > 0 || sources.repos.length > 0) {
+  if (sources.packages.length > 0 || sources.repos.length > 0) {
     return ensureAgentsMd(cwd);
   }
 
@@ -291,10 +258,4 @@ export async function removeOpensrcSection(
   } catch {
     return false;
   }
-}
-
-// Legacy interface for backwards compatibility
-export interface PackageIndex {
-  packages: SourceEntry[];
-  updatedAt: string;
 }

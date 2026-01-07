@@ -1,7 +1,7 @@
 /**
- * Supported package ecosystems
+ * Supported package registries
  */
-export type Ecosystem = "npm" | "pypi" | "crates";
+export type Registry = "npm" | "pypi" | "crates";
 
 export interface PackageInfo {
   name: string;
@@ -30,7 +30,7 @@ export interface RegistryResponse {
 }
 
 export interface ResolvedPackage {
-  ecosystem: Ecosystem;
+  registry: Registry;
   name: string;
   version: string;
   repoUrl: string;
@@ -44,7 +44,7 @@ export interface FetchResult {
   path: string;
   success: boolean;
   error?: string;
-  ecosystem?: Ecosystem;
+  registry?: Registry;
 }
 
 export interface InstalledPackage {
@@ -68,10 +68,10 @@ export interface RepoSpec {
 export type InputType = "package" | "repo";
 
 /**
- * Parsed package specification with ecosystem
+ * Parsed package specification with registry
  */
 export interface PackageSpec {
-  ecosystem: Ecosystem;
+  registry: Registry;
   name: string;
   version?: string;
 }

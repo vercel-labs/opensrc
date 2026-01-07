@@ -5,7 +5,7 @@ import { fetchCommand } from "./commands/fetch.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cleanCommand } from "./commands/clean.js";
-import type { Ecosystem } from "./types.js";
+import type { Registry } from "./types.js";
 
 const program = new Command();
 
@@ -75,7 +75,7 @@ program
 program
   .command("clean")
   .description("Remove all fetched packages and/or repos")
-  .option("--packages", "only remove packages (all ecosystems)")
+  .option("--packages", "only remove packages (all registries)")
   .option("--repos", "only remove repos")
   .option("--npm", "only remove npm packages")
   .option("--pypi", "only remove PyPI packages")
@@ -90,16 +90,16 @@ program
       crates?: boolean;
       cwd?: string;
     }) => {
-      // Determine ecosystem from flags
-      let ecosystem: Ecosystem | undefined;
-      if (options.npm) ecosystem = "npm";
-      else if (options.pypi) ecosystem = "pypi";
-      else if (options.crates) ecosystem = "crates";
+      // Determine registry from flags
+      let registry: Registry | undefined;
+      if (options.npm) registry = "npm";
+      else if (options.pypi) registry = "pypi";
+      else if (options.crates) registry = "crates";
 
       await cleanCommand({
-        packages: options.packages || !!ecosystem,
+        packages: options.packages || !!registry,
         repos: options.repos,
-        ecosystem,
+        registry,
         cwd: options.cwd,
       });
     },

@@ -174,7 +174,7 @@ export async function resolvePyPIPackage(
   const gitTag = `v${resolvedVersion}`;
 
   return {
-    ecosystem: "pypi",
+    registry: "pypi",
     name: packageName,
     version: resolvedVersion,
     repoUrl,
