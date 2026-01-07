@@ -1,4 +1,5 @@
-import { removeSource, packageExists, listSources } from "../lib/git.js";
+import { removeSource, packageExists } from "../lib/common.js";
+import { listSources } from "../lib/git.js";
 import { updateAgentsMd } from "../lib/agents.js";
 
 export interface RemoveOptions {

@@ -1,52 +1,48 @@
-import { simpleGit, SimpleGit } from "simple-git";
-import { rm, mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile, rm } from "fs/promises";
 import { join } from "path";
-import { existsSync } from "fs";
+import { pipeline } from "stream/promises";
+import { createWriteStream, existsSync } from "fs";
+import { extract } from "tar";
 import { getOpensrcDir, getPackagePath, packageExists } from "./common.js";
 import type { ResolvedPackage, FetchResult } from "../types.js";
 
 /**
- * Try to clone at a specific tag, with fallbacks
+ * Download tarball from npm registry
  */
-async function cloneAtTag(
-  git: SimpleGit,
-  repoUrl: string,
+async function downloadTarball(
+  tarballUrl: string,
   targetPath: string,
-  version: string,
-): Promise<{ success: boolean; tag?: string; error?: string }> {
-  // Tags to try in order of preference
-  const tagsToTry = [`v${version}`, version, `${version}`];
+): Promise<void> {
+  const response = await fetch(tarballUrl);
 
-  for (const tag of tagsToTry) {
-    try {
-      await git.clone(repoUrl, targetPath, [
-        "--depth",
-        "1",
-        "--branch",
-        tag,
-        "--single-branch",
-      ]);
-      return { success: true, tag };
-    } catch {
-      // Tag doesn't exist, try next
-      continue;
-    }
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download tarball: ${response.status} ${response.statusText}`,
+    );
   }
 
-  // If no tag worked, clone default branch with a warning
-  try {
-    await git.clone(repoUrl, targetPath, ["--depth", "1"]);
-    return {
-      success: true,
-      tag: "HEAD",
-      error: `Could not find tag for version ${version}, cloned default branch instead`,
-    };
-  } catch (err) {
-    return {
-      success: false,
-      error: `Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`,
-    };
+  if (!response.body) {
+    throw new Error("No response body");
   }
+
+  const fileStream = createWriteStream(targetPath);
+  await pipeline(response.body, fileStream);
+}
+
+/**
+ * Extract tarball to target directory
+ */
+async function extractTarball(
+  tarballPath: string,
+  targetPath: string,
+): Promise<void> {
+  await extract({
+    file: tarballPath,
+    cwd: targetPath,
+    strip: 1,
+  });
+
+  await rm(tarballPath, { force: true });
 }
 
 /**
@@ -55,16 +51,15 @@ async function cloneAtTag(
 async function writeMetadata(
   packagePath: string,
   resolved: ResolvedPackage,
-  actualTag: string,
 ): Promise<void> {
   const metadata = {
     name: resolved.name,
     version: resolved.version,
     repoUrl: resolved.repoUrl,
     repoDirectory: resolved.repoDirectory,
-    fetchedTag: actualTag,
+    fetchedTag: resolved.gitTag,
     fetchedAt: new Date().toISOString(),
-    downloadMethod: "git" as const,
+    downloadMethod: "npm" as const,
   };
 
   const metadataPath = join(packagePath, ".opensrc-meta.json");
@@ -102,104 +97,102 @@ export async function readMetadata(
 }
 
 /**
- * Fetch source code for a resolved package
+ * Fetch source code from npm tarball
  */
 export async function fetchSource(
   resolved: ResolvedPackage,
   cwd: string = process.cwd(),
 ): Promise<FetchResult> {
-  const git = simpleGit();
   const packagePath = getPackagePath(resolved.name, cwd);
   const opensrcDir = getOpensrcDir(cwd);
 
-  // Ensure .opensrc directory exists
   if (!existsSync(opensrcDir)) {
     await mkdir(opensrcDir, { recursive: true });
   }
 
-  // Remove existing if present
   if (existsSync(packagePath)) {
     await rm(packagePath, { recursive: true, force: true });
   }
 
-  // Ensure parent directory exists for scoped packages
   const parentDir = join(packagePath, "..");
   if (!existsSync(parentDir)) {
     await mkdir(parentDir, { recursive: true });
   }
 
-  // Clone the repository
-  const cloneResult = await cloneAtTag(
-    git,
-    resolved.repoUrl,
-    packagePath,
-    resolved.version,
+  console.log(`  → Getting npm tarball URL...`);
+  const tarballUrl = await getTarballUrl(resolved.name, resolved.version);
+  console.log(`  → Downloading from npm...`);
+
+  const tempTarballPath = join(
+    opensrcDir,
+    `${resolved.name.replace(/\//g, "-")}.tgz`,
   );
 
-  if (!cloneResult.success) {
+  try {
+    await downloadTarball(tarballUrl, tempTarballPath);
+    await mkdir(packagePath, { recursive: true });
+    await extractTarball(tempTarballPath, packagePath);
+    await writeMetadata(packagePath, resolved);
+
+    let sourcePath = packagePath;
+    if (resolved.repoDirectory) {
+      sourcePath = join(packagePath, resolved.repoDirectory);
+    }
+
     return {
       package: resolved.name,
       version: resolved.version,
-      path: packagePath,
-      success: false,
-      error: cloneResult.error,
+      path: sourcePath,
+      success: true,
     };
+  } catch (error) {
+    if (existsSync(packagePath)) {
+      await rm(packagePath, { recursive: true, force: true });
+    }
+    if (existsSync(tempTarballPath)) {
+      await rm(tempTarballPath, { force: true });
+    }
+
+    throw error;
   }
-
-  // Remove .git directory to save space and avoid confusion
-  const gitDir = join(packagePath, ".git");
-  if (existsSync(gitDir)) {
-    await rm(gitDir, { recursive: true, force: true });
-  }
-
-  // Write metadata
-  await writeMetadata(packagePath, resolved, cloneResult.tag || "HEAD");
-
-  // Determine the actual source path (for monorepos)
-  let sourcePath = packagePath;
-  if (resolved.repoDirectory) {
-    sourcePath = join(packagePath, resolved.repoDirectory);
-  }
-
-  return {
-    package: resolved.name,
-    version: resolved.version,
-    path: sourcePath,
-    success: true,
-    error: cloneResult.error, // May contain a warning about tag not found
-  };
 }
 
 /**
- * Remove source code for a package
+ * Get tarball URL for a specific package version
  */
-export async function removeSource(
+async function getTarballUrl(
   packageName: string,
-  cwd: string = process.cwd(),
-): Promise<boolean> {
-  const packagePath = getPackagePath(packageName, cwd);
+  version: string,
+): Promise<string> {
+  const NPM_REGISTRY = "https://registry.npmjs.org";
+  const url = `${NPM_REGISTRY}/${encodeURIComponent(packageName).replace("%40", "@")}`;
 
-  if (!existsSync(packagePath)) {
-    return false;
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch package info: ${response.status}`);
   }
 
-  await rm(packagePath, { recursive: true, force: true });
+  const info = (await response.json()) as {
+    versions: {
+      [version: string]: {
+        dist: {
+          tarball: string;
+        };
+      };
+    };
+  };
 
-  // Clean up empty parent directories (for scoped packages)
-  if (packageName.startsWith("@")) {
-    const scopeDir = join(getOpensrcDir(cwd), packageName.split("/")[0]);
-    try {
-      const { readdir } = await import("fs/promises");
-      const contents = await readdir(scopeDir);
-      if (contents.length === 0) {
-        await rm(scopeDir, { recursive: true, force: true });
-      }
-    } catch {
-      // Ignore errors cleaning up scope dir
-    }
+  const versionInfo = info.versions[version];
+  if (!versionInfo) {
+    throw new Error(`Version ${version} not found for ${packageName}`);
   }
 
-  return true;
+  return versionInfo.dist.tarball;
 }
 
 /**
@@ -233,7 +226,6 @@ export async function listSources(cwd: string = process.cwd()): Promise<
     if (!entry.isDirectory()) continue;
 
     if (entry.name.startsWith("@")) {
-      // Scoped package - look inside
       const scopeDir = join(opensrcDir, entry.name);
       const scopeEntries = await readdir(scopeDir, { withFileTypes: true });
 
@@ -253,7 +245,6 @@ export async function listSources(cwd: string = process.cwd()): Promise<
         }
       }
     } else {
-      // Regular package
       const metadata = await readMetadata(entry.name, cwd);
 
       if (metadata) {
