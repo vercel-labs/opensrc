@@ -1,11 +1,8 @@
 import { parsePackageSpec, resolvePackage } from "../lib/registry.js";
 import { detectInstalledVersion } from "../lib/version.js";
-import {
-  fetchSource,
-  packageExists,
-  listSources,
-  readMetadata,
-} from "../lib/git.js";
+import { fetchSource as fetchSourceGit } from "../lib/git.js";
+import { fetchSource as fetchSourceNpm, listSources } from "../lib/npm.js";
+import { packageExists, readMetadata } from "../lib/common.js";
 import { ensureGitignore } from "../lib/gitignore.js";
 import { ensureTsconfigExclude } from "../lib/tsconfig.js";
 import { updateAgentsMd } from "../lib/agents.js";
@@ -16,10 +13,14 @@ import {
 import { confirm } from "../lib/prompt.js";
 import type { FetchResult } from "../types.js";
 
+export type SourceType = "git" | "npm";
+
 export interface FetchOptions {
   cwd?: string;
   /** Override file modification permission: true = allow, false = deny, undefined = prompt */
   allowModifications?: boolean;
+  /** Source download method: git (clone from GitHub) or npm (download tarball) */
+  source?: SourceType;
 }
 
 /**
@@ -52,7 +53,9 @@ async function checkFileModificationPermission(
   }
 
   // Prompt user for permission
-  console.log("\nopensrc can update the following files for better integration:");
+  console.log(
+    "\nopensrc can update the following files for better integration:",
+  );
   console.log("  • .gitignore - add opensrc/ to ignore list");
   console.log("  • tsconfig.json - exclude opensrc/ from compilation");
   console.log("  • AGENTS.md - add source code reference section\n");
@@ -79,19 +82,20 @@ export async function fetchCommand(
   options: FetchOptions = {},
 ): Promise<FetchResult[]> {
   const cwd = options.cwd || process.cwd();
+  const source = options.source || "git";
   const results: FetchResult[] = [];
 
-  // Check if we're allowed to modify files
-  const canModifyFiles = await checkFileModificationPermission(cwd, options.allowModifications);
+  const canModifyFiles = await checkFileModificationPermission(
+    cwd,
+    options.allowModifications,
+  );
 
   if (canModifyFiles) {
-    // Ensure .gitignore has opensrc/ entry
     const gitignoreUpdated = await ensureGitignore(cwd);
     if (gitignoreUpdated) {
       console.log("✓ Added opensrc/ to .gitignore");
     }
 
-    // Ensure tsconfig.json excludes opensrc/
     const tsconfigUpdated = await ensureTsconfigExclude(cwd);
     if (tsconfigUpdated) {
       console.log("✓ Added opensrc/ to tsconfig.json exclude");
@@ -104,11 +108,9 @@ export async function fetchCommand(
     console.log(`\nFetching ${name}...`);
 
     try {
-      // Determine target version
       let version = explicitVersion;
 
       if (!version) {
-        // Try to detect from installed packages
         const installedVersion = await detectInstalledVersion(name, cwd);
         if (installedVersion) {
           version = installedVersion;
@@ -120,7 +122,6 @@ export async function fetchCommand(
         console.log(`  → Using specified version: ${version}`);
       }
 
-      // Check if already exists with the same version
       if (packageExists(name, cwd)) {
         const existingMeta = await readMetadata(name, cwd);
         if (existingMeta && existingMeta.version === version) {
@@ -141,8 +142,6 @@ export async function fetchCommand(
         }
       }
 
-      // Resolve package info from npm registry
-      console.log(`  → Resolving repository...`);
       const resolved = await resolvePackage(name, version);
       console.log(`  → Found: ${resolved.repoUrl}`);
 
@@ -150,14 +149,17 @@ export async function fetchCommand(
         console.log(`  → Monorepo path: ${resolved.repoDirectory}`);
       }
 
-      // Fetch the source
-      console.log(`  → Cloning at ${resolved.gitTag}...`);
-      const result = await fetchSource(resolved, cwd);
+      const fetchFunc = source === "npm" ? fetchSourceNpm : fetchSourceGit;
+      const sourceMsg =
+        source === "npm"
+          ? "Downloading from npm..."
+          : `Cloning at ${resolved.gitTag}...`;
+      console.log(`  → ${sourceMsg}`);
+      const result = await fetchFunc(resolved, cwd);
 
       if (result.success) {
         console.log(`  ✓ Saved to ${result.path}`);
         if (result.error) {
-          // Warning message (e.g., tag not found)
           console.log(`  ⚠ ${result.error}`);
         }
       } else {
@@ -178,13 +180,11 @@ export async function fetchCommand(
     }
   }
 
-  // Summary
   const successful = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
 
   console.log(`\nDone: ${successful} succeeded, ${failed} failed`);
 
-  // Update AGENTS.md with all fetched sources (only if permission granted)
   if (successful > 0 && canModifyFiles) {
     const allSources = await listSources(cwd);
     const agentsUpdated = await updateAgentsMd(allSources, cwd);
@@ -192,7 +192,6 @@ export async function fetchCommand(
       console.log("✓ Updated AGENTS.md");
     }
   } else if (successful > 0 && !canModifyFiles) {
-    // Still update the sources.json index even without modifying AGENTS.md
     const allSources = await listSources(cwd);
     const { updatePackageIndex } = await import("../lib/agents.js");
     await updatePackageIndex(allSources, cwd);
