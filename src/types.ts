@@ -49,6 +49,7 @@ export interface InstalledPackage {
  * Parsed repository specification
  */
 export interface RepoSpec {
+  host: string; // e.g., "github.com", "gitlab.com"
   owner: string;
   repo: string;
   ref?: string; // branch, tag, or commit
@@ -60,12 +61,13 @@ export interface RepoSpec {
 export type InputType = "package" | "repo";
 
 /**
- * Resolved repository information (for direct GitHub repos)
+ * Resolved repository information (for git repos)
  */
 export interface ResolvedRepo {
+  host: string; // e.g., "github.com", "gitlab.com"
   owner: string;
   repo: string;
   ref: string; // branch, tag, or commit (resolved)
   repoUrl: string;
-  displayName: string; // e.g., "owner--repo"
+  displayName: string; // e.g., "github.com/owner/repo"
 }

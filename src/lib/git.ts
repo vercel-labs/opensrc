@@ -5,12 +5,28 @@ import { existsSync } from "fs";
 import type { ResolvedPackage, ResolvedRepo, FetchResult } from "../types.js";
 
 const OPENSRC_DIR = "opensrc";
+const PACKAGES_DIR = "packages";
+const REPOS_DIR = "repos";
 
 /**
  * Get the opensrc directory path
  */
 export function getOpensrcDir(cwd: string = process.cwd()): string {
   return join(cwd, OPENSRC_DIR);
+}
+
+/**
+ * Get the packages directory path
+ */
+export function getPackagesDir(cwd: string = process.cwd()): string {
+  return join(getOpensrcDir(cwd), PACKAGES_DIR);
+}
+
+/**
+ * Get the repos directory path
+ */
+export function getReposDir(cwd: string = process.cwd()): string {
+  return join(getOpensrcDir(cwd), REPOS_DIR);
 }
 
 /**
@@ -21,7 +37,32 @@ export function getPackagePath(
   cwd: string = process.cwd(),
 ): string {
   // Handle scoped packages: @scope/name -> @scope/name (keep the structure)
-  return join(getOpensrcDir(cwd), packageName);
+  return join(getPackagesDir(cwd), packageName);
+}
+
+/**
+ * Get the relative path for a package (for sources.json)
+ */
+export function getPackageRelativePath(packageName: string): string {
+  return `${PACKAGES_DIR}/${packageName}`;
+}
+
+/**
+ * Get the path where a repo's source will be stored
+ */
+export function getRepoPath(
+  displayName: string,
+  cwd: string = process.cwd(),
+): string {
+  // displayName is host/owner/repo, e.g., github.com/vercel/vercel
+  return join(getReposDir(cwd), displayName);
+}
+
+/**
+ * Get the relative path for a repo (for sources.json)
+ */
+export function getRepoRelativePath(displayName: string): string {
+  return `${REPOS_DIR}/${displayName}`;
 }
 
 /**
@@ -32,6 +73,16 @@ export function packageExists(
   cwd: string = process.cwd(),
 ): boolean {
   return existsSync(getPackagePath(packageName, cwd));
+}
+
+/**
+ * Check if a repo source already exists
+ */
+export function repoExists(
+  displayName: string,
+  cwd: string = process.cwd(),
+): boolean {
+  return existsSync(getRepoPath(displayName, cwd));
 }
 
 /**
@@ -93,6 +144,7 @@ async function writeMetadata(
     repoDirectory: resolved.repoDirectory,
     fetchedTag: actualTag,
     fetchedAt: new Date().toISOString(),
+    type: "package" as const,
   };
 
   const metadataPath = join(packagePath, ".opensrc-meta.json");
@@ -112,6 +164,7 @@ export async function readMetadata(
   repoDirectory?: string;
   fetchedTag: string;
   fetchedAt: string;
+  type?: "package" | "repo";
 } | null> {
   const packagePath = getPackagePath(packageName, cwd);
   const metadataPath = join(packagePath, ".opensrc-meta.json");
@@ -137,11 +190,11 @@ export async function fetchSource(
 ): Promise<FetchResult> {
   const git = simpleGit();
   const packagePath = getPackagePath(resolved.name, cwd);
-  const opensrcDir = getOpensrcDir(cwd);
+  const packagesDir = getPackagesDir(cwd);
 
-  // Ensure .opensrc directory exists
-  if (!existsSync(opensrcDir)) {
-    await mkdir(opensrcDir, { recursive: true });
+  // Ensure packages directory exists
+  if (!existsSync(packagesDir)) {
+    await mkdir(packagesDir, { recursive: true });
   }
 
   // Remove existing if present
@@ -167,7 +220,7 @@ export async function fetchSource(
     return {
       package: resolved.name,
       version: resolved.version,
-      path: packagePath,
+      path: getPackageRelativePath(resolved.name),
       success: false,
       error: cloneResult.error,
     };
@@ -183,15 +236,15 @@ export async function fetchSource(
   await writeMetadata(packagePath, resolved, cloneResult.tag || "HEAD");
 
   // Determine the actual source path (for monorepos)
-  let sourcePath = packagePath;
+  let relativePath = getPackageRelativePath(resolved.name);
   if (resolved.repoDirectory) {
-    sourcePath = join(packagePath, resolved.repoDirectory);
+    relativePath = `${relativePath}/${resolved.repoDirectory}`;
   }
 
   return {
     package: resolved.name,
     version: resolved.version,
-    path: sourcePath,
+    path: relativePath,
     success: true,
     error: cloneResult.error, // May contain a warning about tag not found
   };
@@ -201,21 +254,22 @@ export async function fetchSource(
  * Write metadata file for a fetched repository
  */
 async function writeRepoMetadata(
-  packagePath: string,
+  repoPath: string,
   resolved: ResolvedRepo,
 ): Promise<void> {
   const metadata = {
     name: resolved.displayName,
     version: resolved.ref,
     repoUrl: resolved.repoUrl,
+    host: resolved.host,
     owner: resolved.owner,
     repo: resolved.repo,
     fetchedTag: resolved.ref,
     fetchedAt: new Date().toISOString(),
-    isRepo: true,
+    type: "repo" as const,
   };
 
-  const metadataPath = join(packagePath, ".opensrc-meta.json");
+  const metadataPath = join(repoPath, ".opensrc-meta.json");
   await writeFile(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
 }
 
@@ -267,24 +321,30 @@ export async function fetchRepoSource(
   cwd: string = process.cwd(),
 ): Promise<FetchResult> {
   const git = simpleGit();
-  const packagePath = getPackagePath(resolved.displayName, cwd);
-  const opensrcDir = getOpensrcDir(cwd);
+  const repoPath = getRepoPath(resolved.displayName, cwd);
+  const reposDir = getReposDir(cwd);
 
-  // Ensure opensrc directory exists
-  if (!existsSync(opensrcDir)) {
-    await mkdir(opensrcDir, { recursive: true });
+  // Ensure repos directory exists
+  if (!existsSync(reposDir)) {
+    await mkdir(reposDir, { recursive: true });
   }
 
   // Remove existing if present
-  if (existsSync(packagePath)) {
-    await rm(packagePath, { recursive: true, force: true });
+  if (existsSync(repoPath)) {
+    await rm(repoPath, { recursive: true, force: true });
+  }
+
+  // Ensure parent directories exist (for host/owner structure)
+  const parentDir = join(repoPath, "..");
+  if (!existsSync(parentDir)) {
+    await mkdir(parentDir, { recursive: true });
   }
 
   // Clone the repository
   const cloneResult = await cloneAtRef(
     git,
     resolved.repoUrl,
-    packagePath,
+    repoPath,
     resolved.ref,
   );
 
@@ -292,25 +352,25 @@ export async function fetchRepoSource(
     return {
       package: resolved.displayName,
       version: resolved.ref,
-      path: packagePath,
+      path: getRepoRelativePath(resolved.displayName),
       success: false,
       error: cloneResult.error,
     };
   }
 
   // Remove .git directory to save space and avoid confusion
-  const gitDir = join(packagePath, ".git");
+  const gitDir = join(repoPath, ".git");
   if (existsSync(gitDir)) {
     await rm(gitDir, { recursive: true, force: true });
   }
 
   // Write metadata
-  await writeRepoMetadata(packagePath, resolved);
+  await writeRepoMetadata(repoPath, resolved);
 
   return {
     package: resolved.displayName,
     version: resolved.ref,
-    path: packagePath,
+    path: getRepoRelativePath(resolved.displayName),
     success: true,
     error: cloneResult.error, // May contain a warning about ref not found
   };
@@ -326,14 +386,15 @@ export async function readRepoMetadata(
   name: string;
   version: string;
   repoUrl: string;
+  host: string;
   owner: string;
   repo: string;
   fetchedTag: string;
   fetchedAt: string;
-  isRepo: boolean;
+  type: "repo";
 } | null> {
-  const packagePath = getPackagePath(displayName, cwd);
-  const metadataPath = join(packagePath, ".opensrc-meta.json");
+  const repoPath = getRepoPath(displayName, cwd);
+  const metadataPath = join(repoPath, ".opensrc-meta.json");
 
   if (!existsSync(metadataPath)) {
     return null;
@@ -350,7 +411,7 @@ export async function readRepoMetadata(
 /**
  * Remove source code for a package
  */
-export async function removeSource(
+export async function removePackageSource(
   packageName: string,
   cwd: string = process.cwd(),
 ): Promise<boolean> {
@@ -364,7 +425,7 @@ export async function removeSource(
 
   // Clean up empty parent directories (for scoped packages)
   if (packageName.startsWith("@")) {
-    const scopeDir = join(getOpensrcDir(cwd), packageName.split("/")[0]);
+    const scopeDir = join(getPackagesDir(cwd), packageName.split("/")[0]);
     try {
       const { readdir } = await import("fs/promises");
       const contents = await readdir(scopeDir);
@@ -380,9 +441,66 @@ export async function removeSource(
 }
 
 /**
+ * Remove source code for a repo
+ */
+export async function removeRepoSource(
+  displayName: string,
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  const repoPath = getRepoPath(displayName, cwd);
+
+  if (!existsSync(repoPath)) {
+    return false;
+  }
+
+  await rm(repoPath, { recursive: true, force: true });
+
+  // Clean up empty parent directories (host/owner)
+  const parts = displayName.split("/");
+  if (parts.length === 3) {
+    const { readdir } = await import("fs/promises");
+    const reposDir = getReposDir(cwd);
+
+    // Try to clean up owner directory
+    const ownerDir = join(reposDir, parts[0], parts[1]);
+    try {
+      const ownerContents = await readdir(ownerDir);
+      if (ownerContents.length === 0) {
+        await rm(ownerDir, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore errors
+    }
+
+    // Try to clean up host directory
+    const hostDir = join(reposDir, parts[0]);
+    try {
+      const hostContents = await readdir(hostDir);
+      if (hostContents.length === 0) {
+        await rm(hostDir, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
+
+  return true;
+}
+
+/**
+ * @deprecated Use removePackageSource instead
+ */
+export async function removeSource(
+  packageName: string,
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  return removePackageSource(packageName, cwd);
+}
+
+/**
  * List all fetched packages
  */
-export async function listSources(cwd: string = process.cwd()): Promise<
+export async function listPackages(cwd: string = process.cwd()): Promise<
   Array<{
     name: string;
     version: string;
@@ -390,9 +508,9 @@ export async function listSources(cwd: string = process.cwd()): Promise<
     fetchedAt: string;
   }>
 > {
-  const opensrcDir = getOpensrcDir(cwd);
+  const packagesDir = getPackagesDir(cwd);
 
-  if (!existsSync(opensrcDir)) {
+  if (!existsSync(packagesDir)) {
     return [];
   }
 
@@ -404,14 +522,14 @@ export async function listSources(cwd: string = process.cwd()): Promise<
     fetchedAt: string;
   }> = [];
 
-  const entries = await readdir(opensrcDir, { withFileTypes: true });
+  const entries = await readdir(packagesDir, { withFileTypes: true });
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
 
     if (entry.name.startsWith("@")) {
       // Scoped package - look inside
-      const scopeDir = join(opensrcDir, entry.name);
+      const scopeDir = join(packagesDir, entry.name);
       const scopeEntries = await readdir(scopeDir, { withFileTypes: true });
 
       for (const scopeEntry of scopeEntries) {
@@ -424,7 +542,7 @@ export async function listSources(cwd: string = process.cwd()): Promise<
           results.push({
             name: packageName,
             version: metadata.version,
-            path: getPackagePath(packageName, cwd),
+            path: getPackageRelativePath(packageName),
             fetchedAt: metadata.fetchedAt,
           });
         }
@@ -437,7 +555,7 @@ export async function listSources(cwd: string = process.cwd()): Promise<
         results.push({
           name: entry.name,
           version: metadata.version,
-          path: getPackagePath(entry.name, cwd),
+          path: getPackageRelativePath(entry.name),
           fetchedAt: metadata.fetchedAt,
         });
       }
@@ -445,4 +563,93 @@ export async function listSources(cwd: string = process.cwd()): Promise<
   }
 
   return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * List all fetched repos
+ */
+export async function listRepos(cwd: string = process.cwd()): Promise<
+  Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }>
+> {
+  const reposDir = getReposDir(cwd);
+
+  if (!existsSync(reposDir)) {
+    return [];
+  }
+
+  const { readdir } = await import("fs/promises");
+  const results: Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }> = [];
+
+  // Recursively find all .opensrc-meta.json files in repos/
+  async function scanDir(dir: string, depth: number = 0): Promise<void> {
+    if (depth > 3) return; // host/owner/repo = 3 levels
+
+    const entries = await readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const fullPath = join(dir, entry.name);
+      const metadataPath = join(fullPath, ".opensrc-meta.json");
+
+      if (existsSync(metadataPath)) {
+        try {
+          const content = await readFile(metadataPath, "utf-8");
+          const metadata = JSON.parse(content);
+          if (metadata.type === "repo") {
+            results.push({
+              name: metadata.name,
+              version: metadata.version,
+              path: getRepoRelativePath(metadata.name),
+              fetchedAt: metadata.fetchedAt,
+            });
+          }
+        } catch {
+          // Ignore invalid metadata
+        }
+      } else {
+        // Keep scanning subdirectories
+        await scanDir(fullPath, depth + 1);
+      }
+    }
+  }
+
+  await scanDir(reposDir);
+
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * List all fetched sources (packages + repos)
+ */
+export async function listSources(cwd: string = process.cwd()): Promise<{
+  packages: Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }>;
+  repos: Array<{
+    name: string;
+    version: string;
+    path: string;
+    fetchedAt: string;
+  }>;
+}> {
+  const [packages, repos] = await Promise.all([
+    listPackages(cwd),
+    listRepos(cwd),
+  ]);
+
+  return { packages, repos };
 }

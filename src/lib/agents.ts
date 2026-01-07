@@ -26,35 +26,34 @@ Use this source code when you need to understand how a package works internally,
 ${SECTION_END_MARKER}
 `;
 
-export interface PackageIndex {
-  packages: Array<{
-    name: string;
-    version: string;
-    path: string;
-    repoUrl?: string;
-    repoDirectory?: string;
-    fetchedAt: string;
-  }>;
+export interface SourceEntry {
+  name: string;
+  version: string;
+  path: string;
+  fetchedAt: string;
+}
+
+export interface SourcesIndex {
+  repos: SourceEntry[];
+  packages: SourceEntry[];
   updatedAt: string;
 }
 
 /**
- * Update the index.json file in .opensrc/
+ * Update the sources.json file in opensrc/
  */
 export async function updatePackageIndex(
-  packages: Array<{
-    name: string;
-    version: string;
-    path: string;
-    fetchedAt: string;
-  }>,
+  sources: {
+    packages: SourceEntry[];
+    repos: SourceEntry[];
+  },
   cwd: string = process.cwd(),
 ): Promise<void> {
   const opensrcDir = join(cwd, OPENSRC_DIR);
   const sourcesPath = join(opensrcDir, SOURCES_FILE);
 
-  if (packages.length === 0) {
-    // Remove index file if no packages
+  if (sources.packages.length === 0 && sources.repos.length === 0) {
+    // Remove index file if no sources
     if (existsSync(sourcesPath)) {
       const { rm } = await import("fs/promises");
       await rm(sourcesPath, { force: true });
@@ -62,8 +61,14 @@ export async function updatePackageIndex(
     return;
   }
 
-  const index: PackageIndex = {
-    packages: packages.map((p) => ({
+  const index: SourcesIndex = {
+    repos: sources.repos.map((r) => ({
+      name: r.name,
+      version: r.version,
+      path: r.path,
+      fetchedAt: r.fetchedAt,
+    })),
+    packages: sources.packages.map((p) => ({
       name: p.name,
       version: p.version,
       path: p.path,
@@ -134,19 +139,17 @@ Instructions for AI coding agents working with this codebase.
  * Update AGENTS.md and the package index
  */
 export async function updateAgentsMd(
-  packages: Array<{
-    name: string;
-    version: string;
-    path: string;
-    fetchedAt: string;
-  }>,
+  sources: {
+    packages: SourceEntry[];
+    repos: SourceEntry[];
+  },
   cwd: string = process.cwd(),
 ): Promise<boolean> {
   // Always update the index file
-  await updatePackageIndex(packages, cwd);
+  await updatePackageIndex(sources, cwd);
 
-  // Only add section to AGENTS.md if there are packages and section doesn't exist
-  if (packages.length > 0) {
+  // Only add section to AGENTS.md if there are sources and section doesn't exist
+  if (sources.packages.length > 0 || sources.repos.length > 0) {
     return ensureAgentsMd(cwd);
   }
 
@@ -195,4 +198,10 @@ export async function removeOpensrcSection(
   } catch {
     return false;
   }
+}
+
+// Legacy interface for backwards compatibility
+export interface PackageIndex {
+  packages: SourceEntry[];
+  updatedAt: string;
 }

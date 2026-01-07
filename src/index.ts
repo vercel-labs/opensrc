@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { fetchCommand } from "./commands/fetch.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
+import { cleanCommand } from "./commands/clean.js";
 
 const program = new Command();
 
@@ -61,12 +62,29 @@ program
 program
   .command("remove <packages...>")
   .alias("rm")
-  .description("Remove fetched source code for packages")
+  .description("Remove fetched source code for packages or repos")
   .option("--cwd <path>", "working directory (default: current directory)")
   .action(async (packages: string[], options: { cwd?: string }) => {
     await removeCommand(packages, {
       cwd: options.cwd,
     });
   });
+
+// Clean command
+program
+  .command("clean")
+  .description("Remove all fetched packages and/or repos")
+  .option("--packages", "only remove packages")
+  .option("--repos", "only remove repos")
+  .option("--cwd <path>", "working directory (default: current directory)")
+  .action(
+    async (options: { packages?: boolean; repos?: boolean; cwd?: string }) => {
+      await cleanCommand({
+        packages: options.packages,
+        repos: options.repos,
+        cwd: options.cwd,
+      });
+    },
+  );
 
 program.parse();

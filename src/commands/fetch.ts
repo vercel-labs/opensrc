@@ -9,9 +9,12 @@ import {
   fetchSource,
   fetchRepoSource,
   packageExists,
+  repoExists,
   listSources,
   readMetadata,
   readRepoMetadata,
+  getPackageRelativePath,
+  getRepoRelativePath,
 } from "../lib/git.js";
 import { ensureGitignore } from "../lib/gitignore.js";
 import { ensureTsconfigExclude } from "../lib/tsconfig.js";
@@ -96,12 +99,12 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     };
   }
 
-  const displayName = `${repoSpec.owner}--${repoSpec.repo}`;
-  console.log(`\nFetching ${repoSpec.owner}/${repoSpec.repo}...`);
+  const displayName = `${repoSpec.host}/${repoSpec.owner}/${repoSpec.repo}`;
+  console.log(`\nFetching ${repoSpec.owner}/${repoSpec.repo} from ${repoSpec.host}...`);
 
   try {
     // Check if already exists with the same ref
-    if (packageExists(displayName, cwd)) {
+    if (repoExists(displayName, cwd)) {
       const existingMeta = await readRepoMetadata(displayName, cwd);
       if (
         existingMeta &&
@@ -112,7 +115,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
         return {
           package: displayName,
           version: existingMeta.version,
-          path: `${cwd}/opensrc/${displayName}`,
+          path: getRepoRelativePath(displayName),
           success: true,
         };
       } else if (existingMeta) {
@@ -122,7 +125,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
       }
     }
 
-    // Resolve repo info from GitHub API
+    // Resolve repo info from API
     console.log(`  → Resolving repository...`);
     const resolved = await resolveRepo(repoSpec);
     console.log(`  → Found: ${resolved.repoUrl}`);
@@ -133,7 +136,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     const result = await fetchRepoSource(resolved, cwd);
 
     if (result.success) {
-      console.log(`  ✓ Saved to ${result.path}`);
+      console.log(`  ✓ Saved to opensrc/${result.path}`);
       if (result.error) {
         console.log(`  ⚠ ${result.error}`);
       }
@@ -188,12 +191,13 @@ async function fetchPackageInput(
       const existingMeta = await readMetadata(name, cwd);
       if (existingMeta && existingMeta.version === version) {
         console.log(`  ✓ Already up to date (${version})`);
+        const relativePath = existingMeta.repoDirectory
+          ? `${getPackageRelativePath(name)}/${existingMeta.repoDirectory}`
+          : getPackageRelativePath(name);
         return {
           package: name,
           version: existingMeta.version,
-          path: existingMeta.repoDirectory
-            ? `${cwd}/opensrc/${name}/${existingMeta.repoDirectory}`
-            : `${cwd}/opensrc/${name}`,
+          path: relativePath,
           success: true,
         };
       } else if (existingMeta) {
@@ -217,7 +221,7 @@ async function fetchPackageInput(
     const result = await fetchSource(resolved, cwd);
 
     if (result.success) {
-      console.log(`  ✓ Saved to ${result.path}`);
+      console.log(`  ✓ Saved to opensrc/${result.path}`);
       if (result.error) {
         // Warning message (e.g., tag not found)
         console.log(`  ⚠ ${result.error}`);
