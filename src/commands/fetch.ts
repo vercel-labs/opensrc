@@ -27,15 +27,10 @@ import {
 import {
   getFileModificationPermission,
   setFileModificationPermission,
+  getKeepGitPermission,
+  setKeepGitPermission,
 } from "../lib/settings.js";
-import { confirm } from "../lib/prompt.js";
-import type { FetchResult, Registry } from "../types.js";
-
-export interface FetchOptions {
-  cwd?: string;
-  /** Override file modification permission: true = allow, false = deny, undefined = prompt */
-  allowModifications?: boolean;
-}
+import type { FetchResult, Registry, FetchOptions } from "../types.js";
 
 /**
  * Check if file modifications are allowed
@@ -96,7 +91,11 @@ function getRegistryLabel(registry: Registry): string {
 /**
  * Fetch a git repository
  */
-async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
+async function fetchRepoInput(
+  spec: string,
+  cwd: string,
+  options?: Omit<FetchOptions, "allowModifications">,
+): Promise<FetchResult> {
   const repoSpec = parseRepoSpec(spec);
 
   if (!repoSpec) {
@@ -141,7 +140,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
 
     // Fetch the source
     console.log(`  → Cloning at ${resolved.ref}...`);
-    const result = await fetchRepoSource(resolved, cwd);
+    const result = await fetchRepoSource(resolved, cwd, { keepGit: options?.keepGit });
 
     if (result.success) {
       console.log(`  ✓ Saved to opensrc/${result.path}`);
@@ -172,6 +171,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
 async function fetchPackageInput(
   spec: string,
   cwd: string,
+  options?: Omit<FetchOptions, "allowModifications">,
 ): Promise<FetchResult> {
   const packageSpec = parsePackageSpec(spec);
   const { registry, name } = packageSpec;
@@ -235,7 +235,7 @@ async function fetchPackageInput(
 
     // Fetch the source
     console.log(`  → Cloning at ${resolved.gitTag}...`);
-    const result = await fetchSource(resolved, cwd);
+    const result = await fetchSource(resolved, cwd, { keepGit: options?.keepGit });
 
     if (result.success) {
       console.log(`  ✓ Saved to opensrc/${result.path}`);
@@ -350,10 +350,10 @@ export async function fetchCommand(
     const inputType = detectInputType(spec);
 
     if (inputType === "repo") {
-      const result = await fetchRepoInput(spec, cwd);
+      const result = await fetchRepoInput(spec, cwd, { keepGit: options?.keepGit });
       results.push(result);
     } else {
-      const result = await fetchPackageInput(spec, cwd);
+      const result = await fetchPackageInput(spec, cwd, { keepGit: options?.keepGit });
       results.push(result);
     }
   }
