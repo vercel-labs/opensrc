@@ -7,7 +7,9 @@ import type {
   ResolvedRepo,
   FetchResult,
   Registry,
+  FetchOptions,
 } from "../types.js";
+import { getKeepGitPermission } from "./settings.js";
 
 const OPENSRC_DIR = "opensrc";
 const REPOS_DIR = "repos";
@@ -261,6 +263,7 @@ async function cloneAtRef(
 export async function fetchSource(
   resolved: ResolvedPackage,
   cwd: string = process.cwd(),
+  options?: Omit<FetchOptions, "allowModifications">,
 ): Promise<FetchResult> {
   const git = simpleGit();
 
@@ -315,10 +318,13 @@ export async function fetchSource(
     };
   }
 
-  // Remove .git directory to save space and avoid confusion
-  const gitDir = join(repoPath, ".git");
-  if (existsSync(gitDir)) {
-    await rm(gitDir, { recursive: true, force: true });
+  // Remove .git directory to save space and avoid confusion (unless keepGit is true)
+  const shouldKeepGit = options?.keepGit ?? (await getKeepGitPermission(cwd));
+  if (!shouldKeepGit) {
+    const gitDir = join(repoPath, ".git");
+    if (existsSync(gitDir)) {
+      await rm(gitDir, { recursive: true, force: true });
+    }
   }
 
   // Determine the actual source path (for monorepos, include subdirectory)
@@ -343,6 +349,7 @@ export async function fetchSource(
 export async function fetchRepoSource(
   resolved: ResolvedRepo,
   cwd: string = process.cwd(),
+  options?: Omit<FetchOptions, "allowModifications">,
 ): Promise<FetchResult> {
   const git = simpleGit();
   const repoPath = getRepoPath(resolved.displayName, cwd);
@@ -382,10 +389,13 @@ export async function fetchRepoSource(
     };
   }
 
-  // Remove .git directory to save space and avoid confusion
-  const gitDir = join(repoPath, ".git");
-  if (existsSync(gitDir)) {
-    await rm(gitDir, { recursive: true, force: true });
+  // Remove .git directory to save space and avoid confusion (unless keepGit is true)
+  const shouldKeepGit = options?.keepGit ?? (await getKeepGitPermission(cwd));
+  if (!shouldKeepGit) {
+    const gitDir = join(repoPath, ".git");
+    if (existsSync(gitDir)) {
+      await rm(gitDir, { recursive: true, force: true });
+    }
   }
 
   return {

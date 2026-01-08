@@ -7,6 +7,7 @@ const SETTINGS_FILE = "settings.json";
 
 export interface OpensrcSettings {
   allowFileModifications?: boolean;
+  keepGit?: boolean;
 }
 
 /**
@@ -82,5 +83,28 @@ export async function setFileModificationPermission(
 ): Promise<void> {
   const settings = await readSettings(cwd);
   settings.allowFileModifications = allowed;
+  await writeSettings(settings, cwd);
+}
+
+/**
+ * Check if .git directory should be kept
+ * Returns: true if keep-git is enabled, false if disabled, undefined if not set
+ */
+export async function getKeepGitPermission(
+  cwd: string = process.cwd(),
+): Promise<boolean | undefined> {
+  const settings = await readSettings(cwd);
+  return settings.keepGit;
+}
+
+/**
+ * Save the keep-git permission setting
+ */
+export async function setKeepGitPermission(
+  allowed: boolean,
+  cwd: string = process.cwd(),
+): Promise<void> {
+  const settings = await readSettings(cwd);
+  settings.keepGit = allowed;
   await writeSettings(settings, cwd);
 }

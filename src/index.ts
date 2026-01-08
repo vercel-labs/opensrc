@@ -5,7 +5,7 @@ import { fetchCommand } from "./commands/fetch.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cleanCommand } from "./commands/clean.js";
-import type { Registry } from "./types.js";
+import type { Registry, FetchOptions } from "./types.js";
 
 const program = new Command();
 
@@ -32,17 +32,15 @@ program
       return true;
     },
   )
+  .option("--keep-git", "keep .git directory after cloning (default: false)")
   .action(
-    async (packages: string[], options: { cwd?: string; modify?: boolean }) => {
+    async (packages: string[], options: FetchOptions) => {
       if (packages.length === 0) {
         program.help();
         return;
       }
 
-      await fetchCommand(packages, {
-        cwd: options.cwd,
-        allowModifications: options.modify,
-      });
+      await fetchCommand(packages, options);
     },
   );
 
