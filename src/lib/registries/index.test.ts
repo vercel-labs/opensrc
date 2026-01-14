@@ -85,6 +85,36 @@ describe("detectRegistry", () => {
     });
   });
 
+  describe("packagist registry", () => {
+    it("detects packagist: prefix", () => {
+      expect(detectRegistry("packagist:laravel/framework")).toEqual({
+        registry: "packagist",
+        cleanSpec: "laravel/framework",
+      });
+    });
+
+    it("detects composer: prefix", () => {
+      expect(detectRegistry("composer:laravel/framework")).toEqual({
+        registry: "packagist",
+        cleanSpec: "laravel/framework",
+      });
+    });
+
+    it("detects php: prefix", () => {
+      expect(detectRegistry("php:symfony/symfony")).toEqual({
+        registry: "packagist",
+        cleanSpec: "symfony/symfony",
+      });
+    });
+
+    it("handles case-insensitive prefixes", () => {
+      expect(detectRegistry("PACKAGIST:laravel/framework")).toEqual({
+        registry: "packagist",
+        cleanSpec: "laravel/framework",
+      });
+    });
+  });
+
   describe("preserves version in cleanSpec", () => {
     it("npm with version", () => {
       expect(detectRegistry("npm:lodash@4.17.21")).toEqual({
@@ -104,6 +134,20 @@ describe("detectRegistry", () => {
       expect(detectRegistry("crates:serde@1.0.0")).toEqual({
         registry: "crates",
         cleanSpec: "serde@1.0.0",
+      });
+    });
+
+    it("packagist with version", () => {
+      expect(detectRegistry("packagist:laravel/framework@11.0.0")).toEqual({
+        registry: "packagist",
+        cleanSpec: "laravel/framework@11.0.0",
+      });
+    });
+
+    it("packagist with composer-style version", () => {
+      expect(detectRegistry("composer:monolog/monolog:^3.0")).toEqual({
+        registry: "packagist",
+        cleanSpec: "monolog/monolog:^3.0",
       });
     });
   });
@@ -179,6 +223,32 @@ describe("parsePackageSpec", () => {
       });
     });
   });
+
+  describe("packagist packages", () => {
+    it("parses packagist package", () => {
+      expect(parsePackageSpec("packagist:laravel/framework")).toEqual({
+        registry: "packagist",
+        name: "laravel/framework",
+        version: undefined,
+      });
+    });
+
+    it("parses packagist package with @ version", () => {
+      expect(parsePackageSpec("php:laravel/framework@11.0.0")).toEqual({
+        registry: "packagist",
+        name: "laravel/framework",
+        version: "11.0.0",
+      });
+    });
+
+    it("parses packagist package with : version (Composer style)", () => {
+      expect(parsePackageSpec("composer:monolog/monolog:^3.0")).toEqual({
+        registry: "packagist",
+        name: "monolog/monolog",
+        version: "^3.0",
+      });
+    });
+  });
 });
 
 describe("detectInputType", () => {
@@ -201,6 +271,18 @@ describe("detectInputType", () => {
 
     it("crates package", () => {
       expect(detectInputType("crates:serde")).toBe("package");
+    });
+
+    it("packagist package", () => {
+      expect(detectInputType("packagist:laravel/framework")).toBe("package");
+    });
+
+    it("composer package", () => {
+      expect(detectInputType("composer:symfony/symfony")).toBe("package");
+    });
+
+    it("php package", () => {
+      expect(detectInputType("php:guzzlehttp/guzzle")).toBe("package");
     });
 
     it("package with version", () => {

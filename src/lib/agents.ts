@@ -29,10 +29,11 @@ Use this source code when you need to understand how a package works internally,
 To fetch source code for a package or repository you need to understand, run:
 
 \`\`\`bash
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+npx opensrc <package>              # npm package (e.g., npx opensrc zod)
+npx opensrc pypi:<package>         # Python package (e.g., npx opensrc pypi:requests)
+npx opensrc crates:<package>       # Rust crate (e.g., npx opensrc crates:serde)
+npx opensrc packagist:<package>    # PHP package (e.g., npx opensrc packagist:laravel/framework)
+npx opensrc <owner>/<repo>         # GitHub repo (e.g., npx opensrc vercel/ai)
 \`\`\`
 
 ${SECTION_END_MARKER}`;

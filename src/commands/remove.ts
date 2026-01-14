@@ -76,7 +76,7 @@ export async function removeCommand(
 
       if (!pkgInfo) {
         // Try other registries if default didn't work
-        const registries: Registry[] = ["npm", "pypi", "crates"];
+        const registries: Registry[] = ["npm", "pypi", "crates", "packagist"];
         for (const reg of registries) {
           if (reg !== registry) {
             pkgInfo = await getPackageInfo(cleanSpec, cwd, reg);

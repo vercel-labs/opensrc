@@ -10,6 +10,7 @@ const REGISTRY_LABELS: Record<Registry, string> = {
   npm: "npm",
   pypi: "PyPI",
   crates: "crates.io",
+  packagist: "Packagist",
 };
 
 /**
@@ -28,9 +29,10 @@ export async function listCommand(options: ListOptions = {}): Promise<void> {
     );
     console.log("Use `opensrc <owner>/<repo>` to fetch a GitHub repository.");
     console.log("\nSupported registries:");
-    console.log("  • npm:      opensrc zod, opensrc npm:react");
-    console.log("  • PyPI:     opensrc pypi:requests");
-    console.log("  • crates:   opensrc crates:serde");
+    console.log("  • npm:       opensrc zod, opensrc npm:react");
+    console.log("  • PyPI:      opensrc pypi:requests");
+    console.log("  • crates:    opensrc crates:serde");
+    console.log("  • Packagist: opensrc packagist:laravel/framework");
     return;
   }
 
@@ -44,6 +46,7 @@ export async function listCommand(options: ListOptions = {}): Promise<void> {
     npm: [],
     pypi: [],
     crates: [],
+    packagist: [],
   };
 
   for (const pkg of sources.packages) {
@@ -51,7 +54,7 @@ export async function listCommand(options: ListOptions = {}): Promise<void> {
   }
 
   // Display packages by registry
-  const registries: Registry[] = ["npm", "pypi", "crates"];
+  const registries: Registry[] = ["npm", "pypi", "crates", "packagist"];
   let hasDisplayedPackages = false;
 
   for (const registry of registries) {
