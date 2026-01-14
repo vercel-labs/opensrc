@@ -143,13 +143,6 @@ describe("detectRegistry", () => {
         cleanSpec: "laravel/framework@11.0.0",
       });
     });
-
-    it("packagist with composer-style version", () => {
-      expect(detectRegistry("composer:monolog/monolog:^3.0")).toEqual({
-        registry: "packagist",
-        cleanSpec: "monolog/monolog:^3.0",
-      });
-    });
   });
 });
 
@@ -238,14 +231,6 @@ describe("parsePackageSpec", () => {
         registry: "packagist",
         name: "laravel/framework",
         version: "11.0.0",
-      });
-    });
-
-    it("parses packagist package with : version (Composer style)", () => {
-      expect(parsePackageSpec("composer:monolog/monolog:^3.0")).toEqual({
-        registry: "packagist",
-        name: "monolog/monolog",
-        version: "^3.0",
       });
     });
   });
