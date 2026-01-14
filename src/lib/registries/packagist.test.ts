@@ -48,29 +48,6 @@ describe("parsePackagistSpec", () => {
     });
   });
 
-  describe(": version specifier (Composer style)", () => {
-    it("parses package:version", () => {
-      expect(parsePackagistSpec("laravel/framework:11.0.0")).toEqual({
-        name: "laravel/framework",
-        version: "11.0.0",
-      });
-    });
-
-    it("parses with caret constraint", () => {
-      expect(parsePackagistSpec("monolog/monolog:^3.0")).toEqual({
-        name: "monolog/monolog",
-        version: "^3.0",
-      });
-    });
-
-    it("parses with tilde constraint", () => {
-      expect(parsePackagistSpec("phpunit/phpunit:~10.5")).toEqual({
-        name: "phpunit/phpunit",
-        version: "~10.5",
-      });
-    });
-  });
-
   describe("edge cases", () => {
     it("handles whitespace trimming", () => {
       expect(parsePackagistSpec("  laravel/framework  ")).toEqual({

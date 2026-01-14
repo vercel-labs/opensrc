@@ -63,7 +63,7 @@ export function parsePackagistSpec(spec: string): {
 /**
  * Fetch package metadata from Packagist
  */
-async function fetchPackagistInfo(
+export async function fetchPackagistInfo(
   packageName: string,
 ): Promise<PackagistResponse> {
   const url = `${PACKAGIST_API}/${packageName}.json`;
@@ -90,7 +90,7 @@ async function fetchPackagistInfo(
 /**
  * Extract repository URL from package version info
  */
-function extractRepoUrl(version: PackagistVersion): string | null {
+export function extractRepoUrl(version: PackagistVersion): string | null {
   if (!version.source?.url) {
     return null;
   }
@@ -131,29 +131,25 @@ function normalizeRepoUrl(url: string): string {
 
 /**
  * Get available versions sorted by time (newest first)
- * Filters out dev versions unless specifically requested
  */
 function getAvailableVersions(
   versions: PackagistVersion[],
   includeDev = false,
 ): PackagistVersion[] {
-  return versions
-    .filter((v) => {
-      if (includeDev) return true;
-      // Filter out dev versions (dev-*, *-dev, etc.)
-      return (
-        !v.version.startsWith("dev-") &&
-        !v.version.endsWith("-dev") &&
-        !v.version.includes("-dev@")
-      );
-    })
-    .sort((a, b) => {
-      // Sort by time if available, otherwise by version
-      if (a.time && b.time) {
-        return new Date(b.time).getTime() - new Date(a.time).getTime();
-      }
-      return b.version_normalized.localeCompare(a.version_normalized);
-    });
+  return versions.sort((a, b) => {
+    // Sort by time if available, otherwise by version
+    if (a.time && b.time) {
+      return new Date(b.time).getTime() - new Date(a.time).getTime();
+    }
+    return b.version_normalized.localeCompare(a.version_normalized);
+  });
+}
+
+export function getLatestVersion(
+  versions: PackagistVersion[],
+): PackagistVersion {
+  const stableVersions = getAvailableVersions(versions);
+  return stableVersions[0] ?? versions[0];
 }
 
 /**
@@ -176,18 +172,14 @@ export async function resolvePackagistPackage(
     // Find the specific version requested
     // Handle both exact match and normalized match
     const normalizedRequest = version.replace(/^v/, "");
-    resolvedVersion =
-      versions.find(
-        (v) =>
-          v.version === version ||
-          v.version === `v${version}` ||
-          v.version_normalized === normalizedRequest ||
-          v.version_normalized.startsWith(normalizedRequest + "."),
-      ) ||
-      versions.find((v) => v.version.includes(version)) ||
-      versions[0];
+    const matchingVersion = versions.find(
+      (v) =>
+        v.version === version ||
+        v.version === `v${version}` ||
+        v.version_normalized === normalizedRequest,
+    );
 
-    if (!resolvedVersion) {
+    if (!matchingVersion) {
       const availableVersions = getAvailableVersions(versions)
         .slice(0, 5)
         .map((v) => v.version)
@@ -197,10 +189,10 @@ export async function resolvePackagistPackage(
           `Recent versions: ${availableVersions}`,
       );
     }
+
+    resolvedVersion = matchingVersion;
   } else {
-    // Get the latest stable version
-    const stableVersions = getAvailableVersions(versions);
-    resolvedVersion = stableVersions[0] || versions[0];
+    resolvedVersion = getLatestVersion(versions);
   }
 
   const repoUrl = extractRepoUrl(resolvedVersion);
