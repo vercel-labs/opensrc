@@ -61,6 +61,22 @@ opensrc zod facebook/react
 
 GitHub repos are stored as `opensrc/owner--repo/`.
 
+### Git Metadata
+
+By default, `opensrc` removes the `.git` directory after cloning to save space. If you need to perform git operations (like `git blame` or `git log`) on the fetched source, use the `--keep-git` flag:
+
+```bash
+opensrc zod --keep-git
+```
+
+This preference can also be saved in `opensrc/settings.json`:
+
+```json
+{
+  "keepGit": true
+}
+```
+
 ### Managing Sources
 
 ```bash

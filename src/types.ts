@@ -87,3 +87,14 @@ export interface ResolvedRepo {
   repoUrl: string;
   displayName: string; // e.g., "github.com/owner/repo"
 }
+
+/**
+ * Options for fetching source code
+ */
+export interface FetchOptions {
+  cwd?: string;
+  /** Override file modification permission: true = allow, false = deny, undefined = prompt */
+  allowModifications?: boolean;
+  /** Keep .git directory after cloning (default: false) */
+  keepGit?: boolean;
+}
