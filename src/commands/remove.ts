@@ -7,10 +7,12 @@ import {
 } from "../lib/git.js";
 import {
   updateAgentsMd,
+  updatePackageIndex,
   type PackageEntry,
   type RepoEntry,
 } from "../lib/agents.js";
 import { isRepoSpec } from "../lib/repo.js";
+import { getFileModificationPermission } from "../lib/settings.js";
 import { detectRegistry } from "../lib/registries/index.js";
 import type { Registry } from "../types.js";
 
@@ -130,17 +132,27 @@ export async function removeCommand(
       (r) => !removedRepos.includes(r.name),
     );
 
-    const agentsUpdated = await updateAgentsMd(
-      { packages: remainingPackages, repos: remainingRepos },
-      cwd,
-    );
-    if (agentsUpdated) {
-      const totalRemaining = remainingPackages.length + remainingRepos.length;
-      if (totalRemaining === 0) {
-        console.log("✓ Removed opensrc section from AGENTS.md");
-      } else {
-        console.log("✓ Updated AGENTS.md");
+    // Check if file modifications are allowed
+    const canModifyFiles = await getFileModificationPermission(cwd);
+
+    if (canModifyFiles) {
+      const agentsUpdated = await updateAgentsMd(
+        { packages: remainingPackages, repos: remainingRepos },
+        cwd,
+      );
+      if (agentsUpdated) {
+        const totalRemaining = remainingPackages.length + remainingRepos.length;
+        if (totalRemaining === 0) {
+          console.log("✓ Removed opensrc section from AGENTS.md");
+        } else {
+          console.log("✓ Updated AGENTS.md");
+        }
       }
+    } else {
+      await updatePackageIndex(
+        { packages: remainingPackages, repos: remainingRepos },
+        cwd,
+      );
     }
   }
 }
