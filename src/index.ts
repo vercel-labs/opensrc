@@ -20,7 +20,7 @@ program
 program
   .argument(
     "[packages...]",
-    "packages or repos to fetch (e.g., zod, pypi:requests, crates:serde, owner/repo)",
+    "packages or repos to fetch (e.g., zod, pypi:requests, crates:serde, packagist:laravel/framework, owner/repo)",
   )
   .option("--cwd <path>", "working directory (default: current directory)")
   .option(
@@ -80,6 +80,7 @@ program
   .option("--npm", "only remove npm packages")
   .option("--pypi", "only remove PyPI packages")
   .option("--crates", "only remove crates.io packages")
+  .option("--packagist", "only remove Packagist packages")
   .option("--cwd <path>", "working directory (default: current directory)")
   .action(
     async (options: {
@@ -88,6 +89,7 @@ program
       npm?: boolean;
       pypi?: boolean;
       crates?: boolean;
+      packagist?: boolean;
       cwd?: string;
     }) => {
       // Determine registry from flags
@@ -95,6 +97,7 @@ program
       if (options.npm) registry = "npm";
       else if (options.pypi) registry = "pypi";
       else if (options.crates) registry = "crates";
+      else if (options.packagist) registry = "packagist";
 
       await cleanCommand({
         packages: options.packages || !!registry,

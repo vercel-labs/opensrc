@@ -90,6 +90,8 @@ function getRegistryLabel(registry: Registry): string {
       return "PyPI";
     case "crates":
       return "crates.io";
+    case "packagist":
+      return "Packagist";
   }
 }
 

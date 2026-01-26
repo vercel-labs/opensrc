@@ -2,11 +2,13 @@ import type { Registry, PackageSpec, ResolvedPackage } from "../../types.js";
 import { parseNpmSpec, resolveNpmPackage } from "./npm.js";
 import { parsePyPISpec, resolvePyPIPackage } from "./pypi.js";
 import { parseCratesSpec, resolveCrate } from "./crates.js";
+import { parsePackagistSpec, resolvePackagistPackage } from "./packagist.js";
 import { isRepoSpec } from "../repo.js";
 
 export { resolveNpmPackage } from "./npm.js";
 export { resolvePyPIPackage } from "./pypi.js";
 export { resolveCrate } from "./crates.js";
+export { resolvePackagistPackage } from "./packagist.js";
 
 /**
  * Registry prefixes for explicit specification
@@ -19,6 +21,9 @@ const REGISTRY_PREFIXES: Record<string, Registry> = {
   "crates:": "crates",
   "cargo:": "crates",
   "rust:": "crates",
+  "packagist:": "packagist",
+  "composer:": "packagist",
+  "php:": "packagist",
 };
 
 /**
@@ -67,6 +72,9 @@ export function parsePackageSpec(spec: string): PackageSpec {
     case "crates":
       ({ name, version } = parseCratesSpec(cleanSpec));
       break;
+    case "packagist":
+      ({ name, version } = parsePackagistSpec(cleanSpec));
+      break;
   }
 
   return { registry, name, version };
@@ -87,6 +95,8 @@ export async function resolvePackage(
       return resolvePyPIPackage(name, version);
     case "crates":
       return resolveCrate(name, version);
+    case "packagist":
+      return resolvePackagistPackage(name, version);
   }
 }
 
