@@ -2,8 +2,11 @@ import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 
-const OPENSRC_ENTRY = "opensrc/";
+const OPENSRC_ENTRY = ".opensrc/";
 const MARKER_COMMENT = "# opensrc - source code for packages";
+
+// Legacy entries to detect (before the rename to .opensrc)
+const LEGACY_ENTRIES = ["opensrc/", "opensrc"];
 
 /**
  * Check if .gitignore already has .opensrc/ entry
@@ -23,7 +26,11 @@ export async function hasOpensrcEntry(
 
     return lines.some((line) => {
       const trimmed = line.trim();
-      return trimmed === OPENSRC_ENTRY || trimmed === "opensrc";
+      return (
+        trimmed === OPENSRC_ENTRY ||
+        trimmed === ".opensrc" ||
+        LEGACY_ENTRIES.includes(trimmed)
+      );
     });
   } catch {
     return false;
@@ -83,7 +90,8 @@ export async function removeFromGitignore(
       const trimmed = line.trim();
       return (
         trimmed !== OPENSRC_ENTRY &&
-        trimmed !== "opensrc" &&
+        trimmed !== ".opensrc" &&
+        !LEGACY_ENTRIES.includes(trimmed) &&
         trimmed !== MARKER_COMMENT
       );
     });

@@ -42,7 +42,7 @@ describe("hasOpensrcExclude", () => {
     expect(await hasOpensrcExclude(TEST_DIR)).toBe(false);
   });
 
-  it("returns false if exclude array does not contain opensrc", async () => {
+  it("returns false if exclude array does not contain .opensrc", async () => {
     await writeFile(
       TSCONFIG_PATH,
       JSON.stringify({ exclude: ["node_modules", "dist"] }),
@@ -50,26 +50,34 @@ describe("hasOpensrcExclude", () => {
     expect(await hasOpensrcExclude(TEST_DIR)).toBe(false);
   });
 
-  it("returns true if exclude contains opensrc", async () => {
+  it("returns true if exclude contains .opensrc", async () => {
+    await writeFile(
+      TSCONFIG_PATH,
+      JSON.stringify({ exclude: ["node_modules", ".opensrc"] }),
+    );
+    expect(await hasOpensrcExclude(TEST_DIR)).toBe(true);
+  });
+
+  it("returns true if exclude contains .opensrc/", async () => {
+    await writeFile(
+      TSCONFIG_PATH,
+      JSON.stringify({ exclude: ["node_modules", ".opensrc/"] }),
+    );
+    expect(await hasOpensrcExclude(TEST_DIR)).toBe(true);
+  });
+
+  it("returns true if exclude contains ./.opensrc", async () => {
+    await writeFile(
+      TSCONFIG_PATH,
+      JSON.stringify({ exclude: ["node_modules", "./.opensrc"] }),
+    );
+    expect(await hasOpensrcExclude(TEST_DIR)).toBe(true);
+  });
+
+  it("returns true if exclude contains legacy opensrc", async () => {
     await writeFile(
       TSCONFIG_PATH,
       JSON.stringify({ exclude: ["node_modules", "opensrc"] }),
-    );
-    expect(await hasOpensrcExclude(TEST_DIR)).toBe(true);
-  });
-
-  it("returns true if exclude contains opensrc/", async () => {
-    await writeFile(
-      TSCONFIG_PATH,
-      JSON.stringify({ exclude: ["node_modules", "opensrc/"] }),
-    );
-    expect(await hasOpensrcExclude(TEST_DIR)).toBe(true);
-  });
-
-  it("returns true if exclude contains ./opensrc", async () => {
-    await writeFile(
-      TSCONFIG_PATH,
-      JSON.stringify({ exclude: ["node_modules", "./opensrc"] }),
     );
     expect(await hasOpensrcExclude(TEST_DIR)).toBe(true);
   });
@@ -86,14 +94,21 @@ describe("ensureTsconfigExclude", () => {
     expect(result).toBe(false);
   });
 
-  it("returns false if opensrc already in exclude", async () => {
+  it("returns false if .opensrc already in exclude", async () => {
+    await writeFile(TSCONFIG_PATH, JSON.stringify({ exclude: [".opensrc"] }));
+
+    const result = await ensureTsconfigExclude(TEST_DIR);
+    expect(result).toBe(false);
+  });
+
+  it("returns false if legacy opensrc already in exclude", async () => {
     await writeFile(TSCONFIG_PATH, JSON.stringify({ exclude: ["opensrc"] }));
 
     const result = await ensureTsconfigExclude(TEST_DIR);
     expect(result).toBe(false);
   });
 
-  it("adds opensrc to existing exclude array", async () => {
+  it("adds .opensrc to existing exclude array", async () => {
     await writeFile(
       TSCONFIG_PATH,
       JSON.stringify({ exclude: ["node_modules", "dist"] }),
@@ -103,7 +118,7 @@ describe("ensureTsconfigExclude", () => {
     expect(result).toBe(true);
 
     const content = JSON.parse(await readFile(TSCONFIG_PATH, "utf-8"));
-    expect(content.exclude).toContain("opensrc");
+    expect(content.exclude).toContain(".opensrc");
     expect(content.exclude).toContain("node_modules");
     expect(content.exclude).toContain("dist");
   });
@@ -118,7 +133,7 @@ describe("ensureTsconfigExclude", () => {
     expect(result).toBe(true);
 
     const content = JSON.parse(await readFile(TSCONFIG_PATH, "utf-8"));
-    expect(content.exclude).toEqual(["opensrc"]);
+    expect(content.exclude).toEqual([".opensrc"]);
     expect(content.compilerOptions.strict).toBe(true);
   });
 
@@ -138,7 +153,7 @@ describe("ensureTsconfigExclude", () => {
     const content = JSON.parse(await readFile(TSCONFIG_PATH, "utf-8"));
     expect(content.compilerOptions).toEqual(originalConfig.compilerOptions);
     expect(content.include).toEqual(originalConfig.include);
-    expect(content.exclude).toContain("opensrc");
+    expect(content.exclude).toContain(".opensrc");
   });
 
   it("uses 2-space indentation", async () => {

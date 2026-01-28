@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 
-const OPENSRC_DIR = "opensrc";
+const OPENSRC_DIR = ".opensrc";
 const SETTINGS_FILE = "settings.json";
 
 export interface OpensrcSettings {

@@ -92,7 +92,7 @@ export async function cleanCommand(options: CleanOptions = {}): Promise<void> {
   const reposDir = getReposDir(cwd);
   for (const repoPath of allRepoPaths) {
     if (!neededRepoPaths.has(repoPath)) {
-      const fullPath = `${cwd}/opensrc/${repoPath}`;
+      const fullPath = `${cwd}/.opensrc/${repoPath}`;
       if (existsSync(fullPath)) {
         await rm(fullPath, { recursive: true, force: true });
       }

@@ -9,7 +9,7 @@ import type {
   Registry,
 } from "../types.js";
 
-const OPENSRC_DIR = "opensrc";
+const OPENSRC_DIR = ".opensrc";
 const REPOS_DIR = "repos";
 const SOURCES_FILE = "sources.json";
 

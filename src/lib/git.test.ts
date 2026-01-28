@@ -19,7 +19,7 @@ import {
 } from "./git.js";
 
 const TEST_DIR = join(process.cwd(), ".test-git");
-const OPENSRC_DIR = join(TEST_DIR, "opensrc");
+const OPENSRC_DIR = join(TEST_DIR, ".opensrc");
 
 beforeEach(async () => {
   await mkdir(OPENSRC_DIR, { recursive: true });
@@ -33,31 +33,31 @@ afterEach(async () => {
 
 describe("path helpers", () => {
   describe("getOpensrcDir", () => {
-    it("returns opensrc directory path", () => {
-      expect(getOpensrcDir("/project")).toBe("/project/opensrc");
+    it("returns .opensrc directory path", () => {
+      expect(getOpensrcDir("/project")).toBe("/project/.opensrc");
     });
 
     it("uses cwd by default", () => {
-      expect(getOpensrcDir()).toBe(join(process.cwd(), "opensrc"));
+      expect(getOpensrcDir()).toBe(join(process.cwd(), ".opensrc"));
     });
   });
 
   describe("getReposDir", () => {
     it("returns repos directory path", () => {
-      expect(getReposDir("/project")).toBe("/project/opensrc/repos");
+      expect(getReposDir("/project")).toBe("/project/.opensrc/repos");
     });
   });
 
   describe("getRepoPath", () => {
     it("returns full path for repo", () => {
       expect(getRepoPath("github.com/vercel/ai", "/project")).toBe(
-        "/project/opensrc/repos/github.com/vercel/ai",
+        "/project/.opensrc/repos/github.com/vercel/ai",
       );
     });
 
     it("handles different hosts", () => {
       expect(getRepoPath("gitlab.com/owner/repo", "/project")).toBe(
-        "/project/opensrc/repos/gitlab.com/owner/repo",
+        "/project/.opensrc/repos/gitlab.com/owner/repo",
       );
     });
   });

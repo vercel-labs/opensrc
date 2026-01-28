@@ -2,7 +2,7 @@ import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 
-const OPENSRC_DIR = "opensrc";
+const OPENSRC_DIR = ".opensrc";
 
 interface TsConfig {
   exclude?: string[];
@@ -40,7 +40,11 @@ export async function hasOpensrcExclude(
       (entry) =>
         entry === OPENSRC_DIR ||
         entry === `${OPENSRC_DIR}/` ||
-        entry === `./${OPENSRC_DIR}`,
+        entry === `./${OPENSRC_DIR}` ||
+        // Legacy entries (before the rename to .opensrc)
+        entry === "opensrc" ||
+        entry === "opensrc/" ||
+        entry === "./opensrc",
     );
   } catch {
     return false;

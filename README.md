@@ -59,7 +59,7 @@ opensrc owner/repo#main
 opensrc zod facebook/react
 ```
 
-GitHub repos are stored as `opensrc/owner--repo/`.
+GitHub repos are stored as `.opensrc/owner--repo/`.
 
 ### Managing Sources
 
@@ -76,11 +76,11 @@ opensrc remove owner--repo
 
 On first run, opensrc will ask for permission to modify these files:
 
-- `.gitignore` — adds `opensrc/` to ignore list
-- `tsconfig.json` — excludes `opensrc/` from compilation
+- `.gitignore` — adds `.opensrc/` to ignore list
+- `tsconfig.json` — excludes `.opensrc/` from compilation
 - `AGENTS.md` — adds a section pointing agents to the source code
 
-Your choice is saved to `opensrc/settings.json` so you won't be prompted again.
+Your choice is saved to `.opensrc/settings.json` so you won't be prompted again.
 
 To skip the prompt, use the `--modify` flag:
 
@@ -97,15 +97,15 @@ opensrc zod --modify=false
 1. Queries the npm registry to find the package's repository URL
 2. Detects the installed version from your lockfile (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`)
 3. Clones the repository at the matching git tag
-4. Stores the source in `opensrc/<package-name>/`
-5. If permitted: adds `opensrc/` to `.gitignore`, excludes from `tsconfig.json`, updates `AGENTS.md`
+4. Stores the source in `.opensrc/<package-name>/`
+5. If permitted: adds `.opensrc/` to `.gitignore`, excludes from `tsconfig.json`, updates `AGENTS.md`
 
 ## Output
 
 After running `opensrc zod`:
 
 ```
-opensrc/
+.opensrc/
 ├── settings.json       # Your modification preferences
 ├── sources.json        # Index of fetched packages
 └── zod/
@@ -119,7 +119,7 @@ The `sources.json` file lists all fetched packages with their versions, so agent
 ```json
 {
   "packages": [
-    { "name": "zod", "version": "3.22.0", "path": "opensrc/zod" }
+    { "name": "zod", "version": "3.22.0", "path": ".opensrc/zod" }
   ]
 }
 ```

@@ -62,8 +62,8 @@ async function checkFileModificationPermission(
   console.log(
     "\nopensrc can update the following files for better integration:",
   );
-  console.log("  • .gitignore - add opensrc/ to ignore list");
-  console.log("  • tsconfig.json - exclude opensrc/ from compilation");
+  console.log("  • .gitignore - add .opensrc/ to ignore list");
+  console.log("  • tsconfig.json - exclude .opensrc/ from compilation");
   console.log("  • AGENTS.md - add source code reference section\n");
 
   const allowed = await confirm("Allow opensrc to modify these files?");
@@ -71,9 +71,9 @@ async function checkFileModificationPermission(
   await setFileModificationPermission(allowed, cwd);
 
   if (allowed) {
-    console.log("✓ Permission granted - saved to opensrc/settings.json\n");
+    console.log("✓ Permission granted - saved to ..opensrc/settings.json\n");
   } else {
-    console.log("✗ Permission denied - saved to opensrc/settings.json\n");
+    console.log("✗ Permission denied - saved to ..opensrc/settings.json\n");
   }
 
   return allowed;
@@ -144,7 +144,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     const result = await fetchRepoSource(resolved, cwd);
 
     if (result.success) {
-      console.log(`  ✓ Saved to opensrc/${result.path}`);
+      console.log(`  ✓ Saved to .opensrc/${result.path}`);
       if (result.error) {
         console.log(`  ⚠ ${result.error}`);
       }
@@ -238,7 +238,7 @@ async function fetchPackageInput(
     const result = await fetchSource(resolved, cwd);
 
     if (result.success) {
-      console.log(`  ✓ Saved to opensrc/${result.path}`);
+      console.log(`  ✓ Saved to .opensrc/${result.path}`);
       if (result.error) {
         console.log(`  ⚠ ${result.error}`);
       }
@@ -337,12 +337,12 @@ export async function fetchCommand(
   if (canModifyFiles) {
     const gitignoreUpdated = await ensureGitignore(cwd);
     if (gitignoreUpdated) {
-      console.log("✓ Added opensrc/ to .gitignore");
+      console.log("✓ Added .opensrc/ to .gitignore");
     }
 
     const tsconfigUpdated = await ensureTsconfigExclude(cwd);
     if (tsconfigUpdated) {
-      console.log("✓ Added opensrc/ to tsconfig.json exclude");
+      console.log("✓ Added .opensrc/ to tsconfig.json exclude");
     }
   }
 

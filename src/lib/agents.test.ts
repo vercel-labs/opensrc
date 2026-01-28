@@ -12,7 +12,7 @@ import {
 
 const TEST_DIR = join(process.cwd(), ".test-agents");
 const AGENTS_FILE = join(TEST_DIR, "AGENTS.md");
-const OPENSRC_DIR = join(TEST_DIR, "opensrc");
+const OPENSRC_DIR = join(TEST_DIR, ".opensrc");
 const SOURCES_FILE = join(OPENSRC_DIR, "sources.json");
 
 const SECTION_MARKER = "<!-- opensrc:start -->";
