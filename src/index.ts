@@ -3,11 +3,18 @@
 import { Command } from "commander";
 import { fetchCommand } from "./commands/fetch.js";
 import { listCommand } from "./commands/list.js";
+import { updateCommand } from "./commands/update.js";
 import { removeCommand } from "./commands/remove.js";
 import { cleanCommand } from "./commands/clean.js";
 import type { Registry } from "./types.js";
 
 const program = new Command();
+
+function parseModifyOption(val?: string): boolean {
+  if (val === undefined || val === "" || val === "true") return true;
+  if (val === "false") return false;
+  return true;
+}
 
 program
   .name("opensrc")
@@ -26,11 +33,7 @@ program
   .option(
     "--modify [value]",
     "allow/deny modifying .gitignore, tsconfig.json, AGENTS.md",
-    (val) => {
-      if (val === undefined || val === "" || val === "true") return true;
-      if (val === "false") return false;
-      return true;
-    },
+    parseModifyOption,
   )
   .action(
     async (packages: string[], options: { cwd?: string; modify?: boolean }) => {
@@ -58,6 +61,47 @@ program
       cwd: options.cwd,
     });
   });
+
+// Update command
+program
+  .command("update")
+  .description("Update all fetched package sources")
+  .option("--packages", "only update packages (all registries)")
+  .option("--repos", "only update repos")
+  .option("--npm", "only update npm packages")
+  .option("--pypi", "only update PyPI packages")
+  .option("--crates", "only update crates.io packages")
+  .option("--cwd <path>", "working directory (default: current directory)")
+  .option(
+    "--modify [value]",
+    "allow/deny modifying .gitignore, tsconfig.json, AGENTS.md",
+    parseModifyOption,
+  )
+  .action(
+    async (options: {
+      packages?: boolean;
+      repos?: boolean;
+      npm?: boolean;
+      pypi?: boolean;
+      crates?: boolean;
+      cwd?: string;
+      modify?: boolean;
+    }) => {
+      // Determine registry from flags
+      let registry: Registry | undefined;
+      if (options.npm) registry = "npm";
+      else if (options.pypi) registry = "pypi";
+      else if (options.crates) registry = "crates";
+
+      await updateCommand({
+        packages: options.packages || !!registry,
+        repos: options.repos,
+        registry,
+        cwd: options.cwd,
+        allowModifications: options.modify,
+      });
+    },
+  );
 
 // Remove command
 program

@@ -67,10 +67,21 @@ GitHub repos are stored as `opensrc/owner--repo/`.
 # List fetched sources
 opensrc list
 
+# Update all fetched sources
+opensrc update
+
+# Update only repos or a specific registry
+opensrc update --repos
+opensrc update --pypi
+
 # Remove a source (package or repo)
 opensrc remove zod
 opensrc remove owner--repo
 ```
+
+`opensrc update` follows the same behavior as re-running `opensrc <package>` or
+`opensrc <owner>/<repo>`: packages resolve to installed/latest versions, and
+repos reuse the stored ref.
 
 ### File Modifications
 
