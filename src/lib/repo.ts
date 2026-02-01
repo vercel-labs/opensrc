@@ -14,6 +14,7 @@ const DEFAULT_HOST = "github.com";
  * - owner/repo@ref
  * - owner/repo#ref
  * - https://github.com/owner/repo
+ * - https://github.com/owner/repo#ref
  * - https://gitlab.com/owner/repo
  * - https://github.com/owner/repo/tree/branch
  * - github.com/owner/repo
@@ -53,11 +54,14 @@ export function parseRepoSpec(spec: string): RepoSpec | null {
         repo = repo.slice(0, -4);
       }
 
-      // Handle /tree/branch or /blob/branch URLs
-      if (
+      const hashRef = url.hash ? decodeURIComponent(url.hash.slice(1)) : "";
+      if (hashRef) {
+        ref = hashRef;
+      } else if (
         pathParts.length >= 4 &&
         (pathParts[2] === "tree" || pathParts[2] === "blob")
       ) {
+        // Handle /tree/branch or /blob/branch URLs
         ref = pathParts[3];
       }
 
@@ -123,9 +127,17 @@ export function isRepoSpec(spec: string): boolean {
     return true;
   }
 
-  // Git host URL
-  if (trimmed.match(/^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)\//)) {
-    return true;
+  // Git host URL (any host)
+  if (trimmed.match(/^https?:\/\//)) {
+    try {
+      const url = new URL(trimmed);
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length >= 2) {
+        return true;
+      }
+    } catch {
+      // Fall through
+    }
   }
 
   // host/owner/repo format

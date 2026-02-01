@@ -84,6 +84,26 @@ describe("parseRepoSpec", () => {
       });
     });
 
+    it("parses https://github.com/owner/repo#ref", () => {
+      const result = parseRepoSpec("https://github.com/vercel/ai#canary");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: "canary",
+      });
+    });
+
+    it("parses https://github.com/owner/repo#ref/with/slash", () => {
+      const result = parseRepoSpec("https://github.com/vercel/ai#feature/foo");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: "feature/foo",
+      });
+    });
+
     it("parses https://github.com/owner/repo.git", () => {
       const result = parseRepoSpec("https://github.com/vercel/ai.git");
       expect(result).toEqual({
@@ -254,6 +274,10 @@ describe("isRepoSpec", () => {
 
     it("Bitbucket URLs", () => {
       expect(isRepoSpec("https://bitbucket.org/owner/repo")).toBe(true);
+    });
+
+    it("non-standard host URLs", () => {
+      expect(isRepoSpec("https://example.com/owner/repo")).toBe(true);
     });
 
     it("host/owner/repo format", () => {
