@@ -276,6 +276,10 @@ describe("isRepoSpec", () => {
       expect(isRepoSpec("https://bitbucket.org/owner/repo")).toBe(true);
     });
 
+    it("non-standard host URLs", () => {
+      expect(isRepoSpec("https://example.com/owner/repo")).toBe(true);
+    });
+
     it("host/owner/repo format", () => {
       expect(isRepoSpec("github.com/vercel/ai")).toBe(true);
     });

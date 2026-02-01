@@ -127,9 +127,17 @@ export function isRepoSpec(spec: string): boolean {
     return true;
   }
 
-  // Git host URL
-  if (trimmed.match(/^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)\//)) {
-    return true;
+  // Git host URL (any host)
+  if (trimmed.match(/^https?:\/\//)) {
+    try {
+      const url = new URL(trimmed);
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length >= 2) {
+        return true;
+      }
+    } catch {
+      // Fall through
+    }
   }
 
   // host/owner/repo format
