@@ -127,14 +127,31 @@ export function isRepoSpec(spec: string): boolean {
     return true;
   }
 
-  // Git host URL (any host)
+  // Git host URL (known hosts or repo-looking URLs)
   if (trimmed.match(/^https?:\/\//)) {
     try {
       const url = new URL(trimmed);
-      const parts = url.pathname.split("/").filter(Boolean);
-      if (parts.length >= 2) {
+      const host = url.hostname.toLowerCase();
+      const path = url.pathname;
+      const parts = path.split("/").filter(Boolean);
+      if (parts.length < 2) {
+        return false;
+      }
+
+      if (SUPPORTED_HOSTS.includes(host)) {
         return true;
       }
+
+      const lowerPath = path.toLowerCase();
+      const hasGitSuffix = lowerPath.endsWith(".git");
+      const hasTreeOrBlob =
+        lowerPath.includes("/tree/") || lowerPath.includes("/blob/");
+      const hostSignals = ["gitlab", "gitea", "gogs", "github", "bitbucket"];
+      const hasGitHostSignal =
+        host.startsWith("git.") ||
+        hostSignals.some((signal) => host.includes(signal));
+
+      return hasGitSuffix || hasTreeOrBlob || hasGitHostSignal;
     } catch {
       // Fall through
     }

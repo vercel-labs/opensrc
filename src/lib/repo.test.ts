@@ -276,8 +276,10 @@ describe("isRepoSpec", () => {
       expect(isRepoSpec("https://bitbucket.org/owner/repo")).toBe(true);
     });
 
-    it("non-standard host URLs", () => {
-      expect(isRepoSpec("https://example.com/owner/repo")).toBe(true);
+    it("non-standard host URLs with git signals", () => {
+      expect(isRepoSpec("https://git.example.com/owner/repo")).toBe(true);
+      expect(isRepoSpec("https://example.com/owner/repo.git")).toBe(true);
+      expect(isRepoSpec("https://example.com/owner/repo/tree/main")).toBe(true);
     });
 
     it("host/owner/repo format", () => {
@@ -311,6 +313,10 @@ describe("isRepoSpec", () => {
     it("package names with version", () => {
       expect(isRepoSpec("lodash@4.17.0")).toBe(false);
       expect(isRepoSpec("react@18.2.0")).toBe(false);
+    });
+
+    it("non-standard host URLs without git signals", () => {
+      expect(isRepoSpec("https://example.com/owner/repo")).toBe(false);
     });
   });
 });
