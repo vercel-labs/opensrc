@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   detectInputType,
   parsePackageSpec,
@@ -363,6 +364,17 @@ export async function fetchCommand(
   const failed = results.filter((r) => !r.success).length;
 
   console.log(`\nDone: ${successful} succeeded, ${failed} failed`);
+
+  // Output local paths for successful fetches (helpful for AI coding agents)
+  const successfulResults = results.filter((r) => r.success);
+  if (successfulResults.length > 0) {
+    const resolvedCwd = path.resolve(cwd);
+    console.log(`\nLocal paths:`);
+    for (const result of successfulResults) {
+      const absolutePath = path.join(resolvedCwd, "opensrc", result.path);
+      console.log(`  ${result.package}@${result.version}: ${absolutePath}`);
+    }
+  }
 
   // Update sources.json with all fetched sources
   if (successful > 0) {
