@@ -69,7 +69,7 @@ describe("ensureAgentsMd", () => {
     const content = await readFile(AGENTS_FILE, "utf-8");
     expect(content).toContain("Existing content here.");
     expect(content).toContain(SECTION_MARKER);
-    expect(content).toContain("npx opensrc");
+    expect(content).toContain("opensrc <package>");
   });
 
   it("returns false if section already exists and is up to date", async () => {
