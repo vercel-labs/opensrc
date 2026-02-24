@@ -208,12 +208,11 @@ export async function updateAgentsMd(
   // Always update the index file
   await updatePackageIndex(sources, cwd);
 
-  // Add or update section in AGENTS.md if there are sources
   if (sources.packages.length > 0 || sources.repos.length > 0) {
     return ensureAgentsMd(cwd);
   }
 
-  return false;
+  return removeOpensrcSection(cwd);
 }
 
 /**
