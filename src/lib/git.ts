@@ -14,6 +14,13 @@ const REPOS_DIR = "repos";
 const SOURCES_FILE = "sources.json";
 
 /**
+ * Strip credentials from URLs in error messages to prevent token leakage.
+ */
+export function sanitizeError(message: string): string {
+  return message.replace(/https?:\/\/[^@\s]+@/g, "https://***@");
+}
+
+/**
  * Get the opensrc directory path
  */
 export function getOpensrcDir(cwd: string = process.cwd()): string {
@@ -212,7 +219,7 @@ async function cloneAtTag(
   } catch (err) {
     return {
       success: false,
-      error: `Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`,
+      error: sanitizeError(`Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`),
     };
   }
 }
@@ -250,7 +257,7 @@ async function cloneAtRef(
   } catch (err) {
     return {
       success: false,
-      error: `Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`,
+      error: sanitizeError(`Failed to clone repository: ${err instanceof Error ? err.message : String(err)}`),
     };
   }
 }
@@ -296,10 +303,11 @@ export async function fetchSource(
     await mkdir(parentDir, { recursive: true });
   }
 
-  // Clone the repository
+  // Clone the repository (prefer authenticated URL for private repos)
+  const cloneUrl = resolved.cloneUrl || resolved.repoUrl;
   const cloneResult = await cloneAtTag(
     git,
-    resolved.repoUrl,
+    cloneUrl,
     repoPath,
     resolved.version,
   );

@@ -1,4 +1,5 @@
 import type { RegistryResponse, ResolvedPackage } from "../../types.js";
+import { getAuthenticatedCloneUrl } from "../auth.js";
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
 
@@ -140,6 +141,7 @@ export async function resolveNpmPackage(
     name: packageName,
     version: resolvedVersion,
     repoUrl: repo.url,
+    cloneUrl: getAuthenticatedCloneUrl(repo.url),
     repoDirectory: repo.directory,
     gitTag,
   };

@@ -196,24 +196,36 @@ async function resolveGitHubRepo(
   ref?: string,
 ): Promise<ResolvedRepo> {
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
+  const token =
+    process.env.OPENSRC_GITHUB_TOKEN || process.env.GITHUB_TOKEN || undefined;
 
-  const response = await fetch(apiUrl, {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "opensrc-cli",
-    },
-  });
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "opensrc-cli",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(apiUrl, { headers });
 
   if (!response.ok) {
     if (response.status === 404) {
+      const hint = token
+        ? "The provided token may not have access to this repository."
+        : "Make sure it exists and is public, or set OPENSRC_GITHUB_TOKEN for private repos.";
       throw new Error(
-        `Repository "${owner}/${repo}" not found on GitHub. ` +
-          `Make sure it exists and is public.`,
+        `Repository "${owner}/${repo}" not found on GitHub. ${hint}`,
+      );
+    }
+    if (response.status === 401) {
+      throw new Error(
+        `GitHub authentication failed. Check that your OPENSRC_GITHUB_TOKEN is valid.`,
       );
     }
     if (response.status === 403) {
       throw new Error(
-        `GitHub API rate limit exceeded. Try again later or authenticate.`,
+        `GitHub API rate limit exceeded. Try again later or set OPENSRC_GITHUB_TOKEN to authenticate.`,
       );
     }
     throw new Error(
@@ -230,6 +242,9 @@ async function resolveGitHubRepo(
     repo,
     ref: resolvedRef,
     repoUrl: `https://github.com/${owner}/${repo}`,
+    cloneUrl: token
+      ? `https://x-access-token:${token}@github.com/${owner}/${repo}`
+      : undefined,
     displayName: `${host}/${owner}/${repo}`,
   };
 }
@@ -242,18 +257,30 @@ async function resolveGitLabRepo(
 ): Promise<ResolvedRepo> {
   const projectPath = encodeURIComponent(`${owner}/${repo}`);
   const apiUrl = `https://gitlab.com/api/v4/projects/${projectPath}`;
+  const token =
+    process.env.OPENSRC_GITLAB_TOKEN || process.env.GITLAB_TOKEN || undefined;
 
-  const response = await fetch(apiUrl, {
-    headers: {
-      "User-Agent": "opensrc-cli",
-    },
-  });
+  const headers: Record<string, string> = {
+    "User-Agent": "opensrc-cli",
+  };
+  if (token) {
+    headers["PRIVATE-TOKEN"] = token;
+  }
+
+  const response = await fetch(apiUrl, { headers });
 
   if (!response.ok) {
     if (response.status === 404) {
+      const hint = token
+        ? "The provided token may not have access to this repository."
+        : "Make sure it exists and is public, or set OPENSRC_GITLAB_TOKEN for private repos.";
       throw new Error(
-        `Repository "${owner}/${repo}" not found on GitLab. ` +
-          `Make sure it exists and is public.`,
+        `Repository "${owner}/${repo}" not found on GitLab. ${hint}`,
+      );
+    }
+    if (response.status === 401) {
+      throw new Error(
+        `GitLab authentication failed. Check that your OPENSRC_GITLAB_TOKEN is valid.`,
       );
     }
     throw new Error(
@@ -270,6 +297,9 @@ async function resolveGitLabRepo(
     repo,
     ref: resolvedRef,
     repoUrl: `https://gitlab.com/${owner}/${repo}`,
+    cloneUrl: token
+      ? `https://oauth2:${token}@gitlab.com/${owner}/${repo}`
+      : undefined,
     displayName: `${host}/${owner}/${repo}`,
   };
 }

@@ -34,6 +34,7 @@ export interface ResolvedPackage {
   name: string;
   version: string;
   repoUrl: string;
+  cloneUrl?: string; // authenticated URL for private repos (never logged or stored)
   repoDirectory?: string;
   gitTag: string;
 }

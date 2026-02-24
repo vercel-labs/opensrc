@@ -1,4 +1,5 @@
 import type { ResolvedPackage } from "../../types.js";
+import { getAuthenticatedCloneUrl } from "../auth.js";
 
 const PYPI_API = "https://pypi.org/pypi";
 
@@ -178,6 +179,7 @@ export async function resolvePyPIPackage(
     name: packageName,
     version: resolvedVersion,
     repoUrl,
+    cloneUrl: getAuthenticatedCloneUrl(repoUrl),
     gitTag,
   };
 }
