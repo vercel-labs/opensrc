@@ -359,13 +359,20 @@ export async function fetchCommand(
   }
 
   // Summary
-  const successful = results.filter((r) => r.success).length;
-  const failed = results.filter((r) => !r.success).length;
+  const successful = results.filter((r) => r.success);
+  const failed = results.filter((r) => !r.success);
 
-  console.log(`\nDone: ${successful} succeeded, ${failed} failed`);
+  console.log(`\nDone: ${successful.length} succeeded, ${failed.length} failed`);
+
+  if (successful.length > 0) {
+    console.log("\nSource code available at:");
+    for (const result of successful) {
+      console.log(`  ${result.package} → opensrc/${result.path}`);
+    }
+  }
 
   // Update sources.json with all fetched sources
-  if (successful > 0) {
+  if (successful.length > 0) {
     const existingSources = await listSources(cwd);
     const mergedSources = mergeResults(existingSources, results);
 
