@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseRepoSpec,
   isRepoSpec,
   displayNameToSpec,
   displayNameToOwnerRepo,
+  resolveRepo,
 } from "./repo.js";
 
 describe("parseRepoSpec", () => {
@@ -333,5 +334,270 @@ describe("displayNameToOwnerRepo", () => {
   it("returns null for invalid format", () => {
     expect(displayNameToOwnerRepo("invalid")).toBeNull();
     expect(displayNameToOwnerRepo("vercel/ai")).toBeNull();
+  });
+});
+
+describe("resolveRepo", () => {
+  const originalEnv = { ...process.env };
+
+  function mockFetch(response: { ok: boolean; status: number; json?: object }) {
+    return vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: response.ok,
+      status: response.status,
+      statusText: response.ok ? "OK" : "Error",
+      json: () => Promise.resolve(response.json || {}),
+    } as Response);
+  }
+
+  beforeEach(() => {
+    delete process.env.OPENSRC_GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.OPENSRC_GITLAB_TOKEN;
+    delete process.env.GITLAB_TOKEN;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env = { ...originalEnv };
+  });
+
+  describe("GitHub authentication", () => {
+    it("sends Authorization header when OPENSRC_GITHUB_TOKEN is set", async () => {
+      process.env.OPENSRC_GITHUB_TOKEN = "ghp_test123";
+      const spy = mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      await resolveRepo({ host: "github.com", owner: "vercel", repo: "ai" });
+
+      const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer ghp_test123");
+    });
+
+    it("falls back to GITHUB_TOKEN when OPENSRC_GITHUB_TOKEN is not set", async () => {
+      process.env.GITHUB_TOKEN = "ghp_fallback";
+      const spy = mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      await resolveRepo({ host: "github.com", owner: "vercel", repo: "ai" });
+
+      const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer ghp_fallback");
+    });
+
+    it("does not send Authorization header when no token is set", async () => {
+      const spy = mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      await resolveRepo({ host: "github.com", owner: "vercel", repo: "ai" });
+
+      const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBeUndefined();
+    });
+
+    it("returns cloneUrl with embedded token when token is set", async () => {
+      process.env.OPENSRC_GITHUB_TOKEN = "ghp_test123";
+      mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      const result = await resolveRepo({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+      });
+
+      expect(result.cloneUrl).toBe(
+        "https://x-access-token:ghp_test123@github.com/vercel/ai",
+      );
+    });
+
+    it("returns undefined cloneUrl when no token is set", async () => {
+      mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      const result = await resolveRepo({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+      });
+
+      expect(result.cloneUrl).toBeUndefined();
+    });
+
+    it("shows token hint on 404 when token is set", async () => {
+      process.env.OPENSRC_GITHUB_TOKEN = "ghp_test123";
+      mockFetch({ ok: false, status: 404 });
+
+      await expect(
+        resolveRepo({ host: "github.com", owner: "vercel", repo: "private" }),
+      ).rejects.toThrow("token may not have access");
+    });
+
+    it("suggests setting token on 404 when no token is set", async () => {
+      mockFetch({ ok: false, status: 404 });
+
+      await expect(
+        resolveRepo({ host: "github.com", owner: "vercel", repo: "private" }),
+      ).rejects.toThrow("set OPENSRC_GITHUB_TOKEN");
+    });
+
+    it("throws auth failed on 401", async () => {
+      process.env.OPENSRC_GITHUB_TOKEN = "bad_token";
+      mockFetch({ ok: false, status: 401 });
+
+      await expect(
+        resolveRepo({ host: "github.com", owner: "vercel", repo: "ai" }),
+      ).rejects.toThrow("authentication failed");
+    });
+
+    it("mentions token in rate-limit 403 message", async () => {
+      mockFetch({ ok: false, status: 403 });
+
+      await expect(
+        resolveRepo({ host: "github.com", owner: "vercel", repo: "ai" }),
+      ).rejects.toThrow("OPENSRC_GITHUB_TOKEN");
+    });
+  });
+
+  describe("GitLab authentication", () => {
+    it("sends PRIVATE-TOKEN header when OPENSRC_GITLAB_TOKEN is set", async () => {
+      process.env.OPENSRC_GITLAB_TOKEN = "glpat_test123";
+      const spy = mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      await resolveRepo({
+        host: "gitlab.com",
+        owner: "gitlab-org",
+        repo: "gitlab",
+      });
+
+      const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers["PRIVATE-TOKEN"]).toBe("glpat_test123");
+    });
+
+    it("falls back to GITLAB_TOKEN when OPENSRC_GITLAB_TOKEN is not set", async () => {
+      process.env.GITLAB_TOKEN = "glpat_fallback";
+      const spy = mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      await resolveRepo({
+        host: "gitlab.com",
+        owner: "gitlab-org",
+        repo: "gitlab",
+      });
+
+      const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers["PRIVATE-TOKEN"]).toBe("glpat_fallback");
+    });
+
+    it("does not send PRIVATE-TOKEN header when no token is set", async () => {
+      const spy = mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      await resolveRepo({
+        host: "gitlab.com",
+        owner: "gitlab-org",
+        repo: "gitlab",
+      });
+
+      const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers["PRIVATE-TOKEN"]).toBeUndefined();
+    });
+
+    it("returns cloneUrl with embedded token when token is set", async () => {
+      process.env.OPENSRC_GITLAB_TOKEN = "glpat_test123";
+      mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      const result = await resolveRepo({
+        host: "gitlab.com",
+        owner: "gitlab-org",
+        repo: "gitlab",
+      });
+
+      expect(result.cloneUrl).toBe(
+        "https://oauth2:glpat_test123@gitlab.com/gitlab-org/gitlab",
+      );
+    });
+
+    it("returns undefined cloneUrl when no token is set", async () => {
+      mockFetch({
+        ok: true,
+        status: 200,
+        json: { default_branch: "main" },
+      });
+
+      const result = await resolveRepo({
+        host: "gitlab.com",
+        owner: "gitlab-org",
+        repo: "gitlab",
+      });
+
+      expect(result.cloneUrl).toBeUndefined();
+    });
+
+    it("shows token hint on 404 when token is set", async () => {
+      process.env.OPENSRC_GITLAB_TOKEN = "glpat_test123";
+      mockFetch({ ok: false, status: 404 });
+
+      await expect(
+        resolveRepo({
+          host: "gitlab.com",
+          owner: "gitlab-org",
+          repo: "private",
+        }),
+      ).rejects.toThrow("token may not have access");
+    });
+
+    it("suggests setting token on 404 when no token is set", async () => {
+      mockFetch({ ok: false, status: 404 });
+
+      await expect(
+        resolveRepo({
+          host: "gitlab.com",
+          owner: "gitlab-org",
+          repo: "private",
+        }),
+      ).rejects.toThrow("set OPENSRC_GITLAB_TOKEN");
+    });
+
+    it("throws auth failed on 401", async () => {
+      process.env.OPENSRC_GITLAB_TOKEN = "bad_token";
+      mockFetch({ ok: false, status: 401 });
+
+      await expect(
+        resolveRepo({
+          host: "gitlab.com",
+          owner: "gitlab-org",
+          repo: "gitlab",
+        }),
+      ).rejects.toThrow("authentication failed");
+    });
   });
 });

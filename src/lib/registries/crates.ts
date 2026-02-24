@@ -1,4 +1,5 @@
 import type { ResolvedPackage } from "../../types.js";
+import { getAuthenticatedCloneUrl } from "../auth.js";
 
 const CRATES_API = "https://crates.io/api/v1";
 
@@ -186,6 +187,7 @@ export async function resolveCrate(
     name: crateName,
     version: resolvedVersion,
     repoUrl,
+    cloneUrl: getAuthenticatedCloneUrl(repoUrl),
     gitTag,
   };
 }

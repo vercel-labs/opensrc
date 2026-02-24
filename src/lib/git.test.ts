@@ -16,6 +16,7 @@ import {
   listSources,
   removePackageSource,
   removeRepoSource,
+  sanitizeError,
 } from "./git.js";
 
 const TEST_DIR = join(process.cwd(), ".test-git");
@@ -310,6 +311,43 @@ describe("sources.json reading", () => {
       expect(sources.packages[1].registry).toBe("pypi");
       expect(sources.repos).toHaveLength(1);
     });
+  });
+});
+
+describe("sanitizeError", () => {
+  it("strips GitHub token from HTTPS clone URL", () => {
+    const msg =
+      "Failed to clone repository: fatal: could not read from https://x-access-token:ghp_abc123@github.com/owner/repo";
+    expect(sanitizeError(msg)).toBe(
+      "Failed to clone repository: fatal: could not read from https://***@github.com/owner/repo",
+    );
+  });
+
+  it("strips GitLab token from HTTPS clone URL", () => {
+    const msg =
+      "Failed to clone repository: fatal: could not read from https://oauth2:glpat-xyz789@gitlab.com/owner/repo";
+    expect(sanitizeError(msg)).toBe(
+      "Failed to clone repository: fatal: could not read from https://***@gitlab.com/owner/repo",
+    );
+  });
+
+  it("strips multiple tokens from a single message", () => {
+    const msg =
+      "tried https://user:token1@github.com/a/b then https://user:token2@gitlab.com/c/d";
+    expect(sanitizeError(msg)).toBe(
+      "tried https://***@github.com/a/b then https://***@gitlab.com/c/d",
+    );
+  });
+
+  it("leaves non-authenticated URLs unchanged", () => {
+    const msg =
+      "Failed to clone repository: fatal: could not read from https://github.com/owner/repo";
+    expect(sanitizeError(msg)).toBe(msg);
+  });
+
+  it("leaves messages without URLs unchanged", () => {
+    const msg = "Something went wrong";
+    expect(sanitizeError(msg)).toBe(msg);
   });
 });
 
