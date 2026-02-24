@@ -364,13 +364,9 @@ export async function fetchRepoSource(
     await mkdir(parentDir, { recursive: true });
   }
 
-  // Clone the repository
-  const cloneResult = await cloneAtRef(
-    git,
-    resolved.repoUrl,
-    repoPath,
-    resolved.ref,
-  );
+  // Clone the repository (prefer authenticated URL for private repos)
+  const cloneUrl = resolved.cloneUrl || resolved.repoUrl;
+  const cloneResult = await cloneAtRef(git, cloneUrl, repoPath, resolved.ref);
 
   if (!cloneResult.success) {
     return {

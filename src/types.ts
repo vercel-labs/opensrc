@@ -85,5 +85,6 @@ export interface ResolvedRepo {
   repo: string;
   ref: string; // branch, tag, or commit (resolved)
   repoUrl: string;
+  cloneUrl?: string; // authenticated URL for private repos (never logged or stored)
   displayName: string; // e.g., "github.com/owner/repo"
 }
