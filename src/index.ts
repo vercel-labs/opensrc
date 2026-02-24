@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import { fetchCommand } from "./commands/fetch.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cleanCommand } from "./commands/clean.js";
 import type { Registry } from "./types.js";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
 
 const program = new Command();
 
@@ -14,7 +18,8 @@ program
   .description(
     "Fetch source code for packages to give coding agents deeper context",
   )
-  .version("0.1.0");
+  .version(pkg.version)
+  .enablePositionalOptions();
 
 // Default command: fetch packages
 program

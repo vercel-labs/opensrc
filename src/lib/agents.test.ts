@@ -263,6 +263,31 @@ describe("updateAgentsMd", () => {
 
     expect(existsSync(AGENTS_FILE)).toBe(false);
   });
+
+  it("removes opensrc section from AGENTS.md when sources become empty", async () => {
+    const pkg = {
+      name: "zod",
+      version: "3.22.0",
+      registry: "npm" as const,
+      path: "repos/github.com/colinhacks/zod",
+      fetchedAt: "2024-01-01T00:00:00.000Z",
+    };
+
+    await updateAgentsMd({ packages: [pkg], repos: [] }, TEST_DIR);
+    expect(existsSync(AGENTS_FILE)).toBe(true);
+    const contentBefore = await readFile(AGENTS_FILE, "utf-8");
+    expect(contentBefore).toContain(SECTION_MARKER);
+
+    const result = await updateAgentsMd(
+      { packages: [], repos: [] },
+      TEST_DIR,
+    );
+    expect(result).toBe(true);
+
+    const contentAfter = await readFile(AGENTS_FILE, "utf-8");
+    expect(contentAfter).not.toContain(SECTION_MARKER);
+    expect(contentAfter).not.toContain(SECTION_END_MARKER);
+  });
 });
 
 describe("removeOpensrcSection", () => {
