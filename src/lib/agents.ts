@@ -2,6 +2,7 @@ import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import type { Registry } from "../types.js";
+import { detect, resolveCommand } from "package-manager-detector";
 
 const AGENTS_FILE = "AGENTS.md";
 const OPENSRC_DIR = "opensrc";
@@ -11,9 +12,31 @@ const SECTION_MARKER = "<!-- opensrc:start -->";
 const SECTION_END_MARKER = "<!-- opensrc:end -->";
 
 /**
+ * Detect the package manager runner command for the given directory.
+ * Returns e.g. "npx", "pnpm dlx", "yarn dlx", "bun x".
+ * Falls back to "npx" if detection fails.
+ */
+async function detectRunner(cwd: string): Promise<string> {
+  try {
+    const result = await detect({ cwd });
+    if (!result) return "npx";
+
+    const resolved = resolveCommand(result.agent, "execute", ["opensrc"]);
+    if (!resolved) return "npx";
+
+    const { command, args } = resolved;
+    // args ends with "opensrc"; strip it to get just the runner prefix
+    const runnerParts = [command, ...args.slice(0, -1)];
+    return runnerParts.join(" ");
+  } catch {
+    return "npx";
+  }
+}
+
+/**
  * Get the section content (without leading newline for comparison)
  */
-function getSectionContent(): string {
+function getSectionContent(runner: string): string {
   return `${SECTION_MARKER}
 
 ${SECTION_START}
@@ -29,10 +52,10 @@ Use this source code when you need to understand how a package works internally,
 To fetch source code for a package or repository you need to understand, run:
 
 \`\`\`bash
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+${runner} opensrc <package>           # npm package (e.g., ${runner} opensrc zod)
+${runner} opensrc pypi:<package>      # Python package (e.g., ${runner} opensrc pypi:requests)
+${runner} opensrc crates:<package>    # Rust crate (e.g., ${runner} opensrc crates:serde)
+${runner} opensrc <owner>/<repo>      # GitHub repo (e.g., ${runner} opensrc vercel/ai)
 \`\`\`
 
 ${SECTION_END_MARKER}`;
@@ -148,7 +171,8 @@ export async function ensureAgentsMd(
   cwd: string = process.cwd(),
 ): Promise<boolean> {
   const agentsPath = join(cwd, AGENTS_FILE);
-  const newSection = getSectionContent();
+  const runner = await detectRunner(cwd);
+  const newSection = getSectionContent(runner);
 
   if (existsSync(agentsPath)) {
     const content = await readFile(agentsPath, "utf-8");

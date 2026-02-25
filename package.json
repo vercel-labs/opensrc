@@ -36,6 +36,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "commander": "^12.1.0",
+    "package-manager-detector": "^1.6.0",
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
