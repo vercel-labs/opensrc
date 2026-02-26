@@ -11,7 +11,7 @@ import {
   type PackageEntry,
   type RepoEntry,
 } from "../lib/agents.js";
-import { isRepoSpec } from "../lib/repo.js";
+import { isRepoSpec, parseRepoSpec } from "../lib/repo.js";
 import { getFileModificationPermission } from "../lib/settings.js";
 import { detectRegistry } from "../lib/registries/index.js";
 import type { Registry } from "../types.js";
@@ -42,10 +42,11 @@ export async function removeCommand(
 
     if (isRepo) {
       // Try to remove as repo
-      // Convert formats like "vercel/vercel" to "github.com/vercel/vercel" if needed
+      // Normalize input to "host/owner/repo" format used in sources.json
       let displayName = item;
-      if (item.split("/").length === 2 && !item.startsWith("http")) {
-        displayName = `github.com/${item}`;
+      const parsed = parseRepoSpec(item);
+      if (parsed) {
+        displayName = `${parsed.host}/${parsed.owner}/${parsed.repo}`;
       }
 
       if (!repoExists(displayName, cwd)) {
