@@ -6,6 +6,7 @@ vi.mock("./commands/remove.js", () => ({ removeCommand: vi.fn() }));
 vi.mock("./commands/clean.js", () => ({ cleanCommand: vi.fn() }));
 
 import { createProgram } from "./index.js";
+import { fetchCommand } from "./commands/fetch.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cleanCommand } from "./commands/clean.js";
@@ -15,6 +16,21 @@ beforeEach(() => {
 });
 
 describe("CLI --cwd routing", () => {
+  it("passes --allow-prerelease to fetch command", async () => {
+    const program = createProgram();
+    await program.parseAsync([
+      "node",
+      "opensrc",
+      "nuget:Serilog",
+      "--allow-prerelease",
+    ]);
+
+    expect(fetchCommand).toHaveBeenCalledWith(
+      ["nuget:Serilog"],
+      expect.objectContaining({ allowPrerelease: true }),
+    );
+  });
+
   it("passes --cwd to list subcommand", async () => {
     const program = createProgram();
     await program.parseAsync(["node", "opensrc", "list", "--cwd", "/tmp/foo"]);
@@ -53,6 +69,18 @@ describe("CLI --cwd routing", () => {
 
     expect(cleanCommand).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: "/tmp/baz" }),
+    );
+  });
+
+  it("routes clean --nuget to nuget registry", async () => {
+    const program = createProgram();
+    await program.parseAsync(["node", "opensrc", "clean", "--nuget"]);
+
+    expect(cleanCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        packages: true,
+        registry: "nuget",
+      }),
     );
   });
 });
