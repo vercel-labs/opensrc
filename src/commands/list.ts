@@ -10,6 +10,7 @@ const REGISTRY_LABELS: Record<Registry, string> = {
   npm: "npm",
   pypi: "PyPI",
   crates: "crates.io",
+  nuget: "NuGet",
 };
 
 /**
@@ -31,6 +32,7 @@ export async function listCommand(options: ListOptions = {}): Promise<void> {
     console.log("  • npm:      opensrc zod, opensrc npm:react");
     console.log("  • PyPI:     opensrc pypi:requests");
     console.log("  • crates:   opensrc crates:serde");
+    console.log("  • NuGet:    opensrc nuget:Newtonsoft.Json");
     return;
   }
 
@@ -44,6 +46,7 @@ export async function listCommand(options: ListOptions = {}): Promise<void> {
     npm: [],
     pypi: [],
     crates: [],
+    nuget: [],
   };
 
   for (const pkg of sources.packages) {
@@ -51,7 +54,7 @@ export async function listCommand(options: ListOptions = {}): Promise<void> {
   }
 
   // Display packages by registry
-  const registries: Registry[] = ["npm", "pypi", "crates"];
+  const registries: Registry[] = ["npm", "pypi", "crates", "nuget"];
   let hasDisplayedPackages = false;
 
   for (const registry of registries) {

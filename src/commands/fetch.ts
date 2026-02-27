@@ -35,6 +35,8 @@ export interface FetchOptions {
   cwd?: string;
   /** Override file modification permission: true = allow, false = deny, undefined = prompt */
   allowModifications?: boolean;
+  /** Allow prerelease versions when resolving latest NuGet packages */
+  allowPrerelease?: boolean;
 }
 
 /**
@@ -90,6 +92,8 @@ function getRegistryLabel(registry: Registry): string {
       return "PyPI";
     case "crates":
       return "crates.io";
+    case "nuget":
+      return "NuGet";
   }
 }
 
@@ -172,6 +176,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
 async function fetchPackageInput(
   spec: string,
   cwd: string,
+  options: FetchOptions,
 ): Promise<FetchResult> {
   const packageSpec = parsePackageSpec(spec);
   const { registry, name } = packageSpec;
@@ -219,6 +224,7 @@ async function fetchPackageInput(
       registry,
       name,
       version,
+      allowPrerelease: options.allowPrerelease,
     });
 
     const repoDisplayName = getRepoDisplayName(resolved.repoUrl);
@@ -353,7 +359,7 @@ export async function fetchCommand(
       const result = await fetchRepoInput(spec, cwd);
       results.push(result);
     } else {
-      const result = await fetchPackageInput(spec, cwd);
+      const result = await fetchPackageInput(spec, cwd, options);
       results.push(result);
     }
   }

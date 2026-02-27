@@ -1,7 +1,7 @@
 /**
  * Supported package registries
  */
-export type Registry = "npm" | "pypi" | "crates";
+export type Registry = "npm" | "pypi" | "crates" | "nuget";
 
 export interface PackageInfo {
   name: string;
@@ -74,6 +74,7 @@ export interface PackageSpec {
   registry: Registry;
   name: string;
   version?: string;
+  allowPrerelease?: boolean;
 }
 
 /**

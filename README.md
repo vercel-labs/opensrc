@@ -1,6 +1,6 @@
 # opensrc
 
-Fetch source code for npm packages to give coding agents deeper context than types alone.
+Fetch source code for packages and repositories to give coding agents deeper context than types alone.
 
 ## Why?
 
@@ -36,6 +36,29 @@ opensrc react react-dom next
 ```
 
 Re-running `opensrc <package>` automatically updates to match your installed version—no flags needed.
+
+### Other Registries (PyPI, crates.io, NuGet)
+
+```bash
+# Python package from PyPI
+opensrc pypi:requests
+
+# Rust crate from crates.io
+opensrc crates:serde
+
+# NuGet package (latest)
+opensrc nuget:Newtonsoft.Json
+
+# NuGet package (latest including prerelease)
+opensrc nuget:Serilog --allow-prerelease
+
+# NuGet package (specific version)
+opensrc nuget:Serilog@3.1.0
+
+# NuGet aliases
+opensrc dotnet:Microsoft.Extensions.Logging@8.0.0
+opensrc nupkg:Serilog
+```
 
 ### GitHub Repositories
 
@@ -94,11 +117,18 @@ opensrc zod --modify=false
 
 ## How it works
 
-1. Queries the npm registry to find the package's repository URL
-2. Detects the installed version from your lockfile (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`)
-3. Clones the repository at the matching git tag
-4. Stores the source in `opensrc/<package-name>/`
+1. Queries the selected package registry to find the package's source repository URL
+2. For npm without an explicit version, detects installed version from your lockfile (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`)
+3. Clones the repository at a version-aligned git tag when possible
+4. Stores the source in `opensrc/repos/<host>/<owner>/<repo>/`
 5. If permitted: adds `opensrc/` to `.gitignore`, excludes from `tsconfig.json`, updates `AGENTS.md`
+
+Supported package registries:
+
+- npm (default)
+- PyPI (`pypi:` / `pip:` / `python:`)
+- crates.io (`crates:` / `cargo:` / `rust:`)
+- NuGet (`nuget:` / `dotnet:` / `nupkg:`)
 
 ## Output
 
