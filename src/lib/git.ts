@@ -183,8 +183,12 @@ async function cloneAtTag(
   repoUrl: string,
   targetPath: string,
   version: string,
+  primaryTag?: string,
 ): Promise<{ success: boolean; tag?: string; error?: string }> {
-  const tagsToTry = [`v${version}`, version, `${version}`];
+  const standard = [`v${version}`, version];
+  const tagsToTry = primaryTag
+    ? [primaryTag, ...standard.filter((t) => t !== primaryTag)]
+    : standard;
 
   for (const tag of tagsToTry) {
     try {
@@ -302,6 +306,7 @@ export async function fetchSource(
     resolved.repoUrl,
     repoPath,
     resolved.version,
+    resolved.gitTag !== `v${resolved.version}` ? resolved.gitTag : undefined,
   );
 
   if (!cloneResult.success) {

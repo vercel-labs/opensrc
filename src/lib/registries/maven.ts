@@ -185,24 +185,24 @@ async function fetchRecentVersions(
 }
 
 /**
- * Fetch and parse the POM file to extract SCM repository URL.
+ * Fetch and parse the POM file to extract SCM info.
+ *
+ * Returns the normalized repository URL and the explicit git tag from
+ * <scm><tag> if present (Maven's SCM plugin writes the exact release tag).
  *
  * POM files are XML. We use targeted regex to avoid adding an XML
  * parser dependency — the <scm> block is well-structured enough.
  */
-async function fetchScmUrl(
+async function fetchScmInfo(
   groupId: string,
   artifactId: string,
   version: string,
-): Promise<string | null> {
+): Promise<{ repoUrl: string; scmTag?: string } | null> {
   const groupPath = groupIdToPath(groupId);
   const pomUrl = `${MAVEN_CENTRAL_REPO}/${groupPath}/${artifactId}/${version}/${artifactId}-${version}.pom`;
 
   const response = await fetch(pomUrl);
-
-  if (!response.ok) {
-    return null;
-  }
+  if (!response.ok) return null;
 
   const pom = await response.text();
 
@@ -212,17 +212,20 @@ async function fetchScmUrl(
 
   const scmBlock = scmMatch[1];
 
-  // Prefer <url> (human-readable), then <connection>, then <developerConnection>
-  const urlMatch = scmBlock.match(/<url>(.*?)<\/url>/);
-  if (urlMatch) {
-    const url = normalizeScmUrl(urlMatch[1].trim());
-    if (url && isGitRepoUrl(url)) return url;
-  }
+  // Extract explicit <tag> element — this is the exact git tag used for the release
+  const tagMatch = scmBlock.match(/<tag>(.*?)<\/tag>/);
+  const scmTag =
+    tagMatch && tagMatch[1].trim() !== "HEAD"
+      ? tagMatch[1].trim()
+      : undefined;
 
+  // Extract URL — prefer <connection>/<developerConnection> for accuracy
+  // since <url> sometimes includes artifact subdirectory paths (e.g. Netty).
+  // Connection strings go through normalizeScmUrl which handles all protocol variants.
   const connMatch = scmBlock.match(/<connection>(.*?)<\/connection>/);
   if (connMatch) {
     const url = normalizeScmUrl(connMatch[1].trim());
-    if (url && isGitRepoUrl(url)) return url;
+    if (url && isGitRepoUrl(url)) return { repoUrl: url, scmTag };
   }
 
   const devConnMatch = scmBlock.match(
@@ -230,7 +233,14 @@ async function fetchScmUrl(
   );
   if (devConnMatch) {
     const url = normalizeScmUrl(devConnMatch[1].trim());
-    if (url && isGitRepoUrl(url)) return url;
+    if (url && isGitRepoUrl(url)) return { repoUrl: url, scmTag };
+  }
+
+  // Fall back to <url> — strip any trailing artifact path beyond owner/repo
+  const urlMatch = scmBlock.match(/<url>(.*?)<\/url>/);
+  if (urlMatch) {
+    const url = normalizeScmUrl(urlMatch[1].trim());
+    if (url && isGitRepoUrl(url)) return { repoUrl: url, scmTag };
   }
 
   return null;
@@ -263,8 +273,11 @@ function normalizeScmUrl(raw: string): string | null {
   // Strip .git suffix and trailing slashes
   url = url.replace(/\.git$/, "").replace(/\/+$/, "");
 
-  // Strip tree/blob subpaths
+  // Strip tree/blob subpaths and any trailing artifact directory
+  // GitHub repo URLs must be exactly https://github.com/owner/repo
   url = url.replace(/\/(tree|blob)\/.*$/, "");
+  const ghMatch = url.match(/^https?:\/\/(github|gitlab)\.com\/([^/]+)\/([^/]+)/);
+  if (ghMatch) return `https://${ghMatch[1]}.com/${ghMatch[2]}/${ghMatch[3].replace(/\.git$/, "")}`;
 
   if (!url.startsWith("http")) return null;
 
@@ -301,10 +314,10 @@ export async function resolveMavenPackage(
     ? (await verifyVersion(groupId, artifactId, version), version)
     : await fetchLatestVersion(groupId, artifactId);
 
-  // Fetch SCM URL from POM
-  const repoUrl = await fetchScmUrl(groupId, artifactId, resolvedVersion);
+  // Fetch SCM info from POM (URL + optional explicit git tag)
+  const scmInfo = await fetchScmInfo(groupId, artifactId, resolvedVersion);
 
-  if (!repoUrl) {
+  if (!scmInfo) {
     const recentVersions = await fetchRecentVersions(groupId, artifactId);
     throw new Error(
       `No repository URL found in POM for "${groupId}:${artifactId}:${resolvedVersion}". ` +
@@ -315,11 +328,17 @@ export async function resolveMavenPackage(
     );
   }
 
+  // Git tag resolution priority:
+  // 1. <scm><tag> from the POM — the exact tag used at release time (most reliable)
+  // 2. {artifactId}-{version} — common legacy Java convention (e.g. jackson-databind-2.16.0)
+  // 3. v{version} / {version} — tried automatically by git.ts as fallbacks
+  const gitTag = scmInfo.scmTag ?? `${artifactId}-${resolvedVersion}`;
+
   return {
     registry: "maven",
     name: `${groupId}:${artifactId}`,
     version: resolvedVersion,
-    repoUrl,
-    gitTag: `v${resolvedVersion}`,
+    repoUrl: scmInfo.repoUrl,
+    gitTag,
   };
 }
