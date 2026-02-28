@@ -110,9 +110,10 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
   }
 
   const displayName = `${repoSpec.host}/${repoSpec.owner}/${repoSpec.repo}`;
-  console.log(
-    `\nFetching ${repoSpec.owner}/${repoSpec.repo} from ${repoSpec.host}...`,
-  );
+  const logTarget = repoSpec.subpath
+    ? `${repoSpec.owner}/${repoSpec.repo}/${repoSpec.subpath}`
+    : `${repoSpec.owner}/${repoSpec.repo}`;
+  console.log(`\nFetching ${logTarget} from ${repoSpec.host}...`);
 
   try {
     // Check if already exists with the same ref
@@ -140,7 +141,10 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     console.log(`  → Ref: ${resolved.ref}`);
 
     // Fetch the source
-    console.log(`  → Cloning at ${resolved.ref}...`);
+    const cloneMsg = resolved.subpath
+      ? `  → Sparse cloning ${resolved.subpath} at ${resolved.ref}...`
+      : `  → Cloning at ${resolved.ref}...`;
+    console.log(cloneMsg);
     const result = await fetchRepoSource(resolved, cwd);
 
     if (result.success) {

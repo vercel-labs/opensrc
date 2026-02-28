@@ -53,15 +53,22 @@ export function parseRepoSpec(spec: string): RepoSpec | null {
         repo = repo.slice(0, -4);
       }
 
+      let subpath: string | undefined;
+
       // Handle /tree/branch or /blob/branch URLs
       if (
         pathParts.length >= 4 &&
         (pathParts[2] === "tree" || pathParts[2] === "blob")
       ) {
         ref = pathParts[3];
+        if (pathParts.length > 4) {
+          subpath = pathParts.slice(4).join("/");
+        }
+      } else if (pathParts.length > 2) {
+        subpath = pathParts.slice(2).join("/");
       }
 
-      return { host, owner, repo, ref };
+      return { host, owner, repo, ref, subpath };
     } catch {
       return null;
     }
@@ -76,13 +83,13 @@ export function parseRepoSpec(spec: string): RepoSpec | null {
   else if (input.startsWith("@")) {
     return null;
   }
-  // Must contain exactly one / to be a repo (owner/repo)
-  else if (input.split("/").length !== 2) {
+  // Must contain at least owner/repo (2 segments)
+  else if (input.split("/").length < 2) {
     return null;
   }
 
   // Extract ref from @ or # suffix
-  // owner/repo@v1.0.0 or owner/repo#main
+  // owner/repo@v1.0.0 or owner/repo#main or owner/repo/path@main
   const atIndex = input.indexOf("@");
   const hashIndex = input.indexOf("#");
 
@@ -94,17 +101,21 @@ export function parseRepoSpec(spec: string): RepoSpec | null {
     input = input.slice(0, hashIndex);
   }
 
-  // Split into owner/repo
+  // Split into owner/repo[/subpath]
   const parts = input.split("/");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+  if (parts.length < 2 || !parts[0] || !parts[1]) {
     return null;
   }
+
+  const subpath =
+    parts.length > 2 ? parts.slice(2).join("/") : undefined;
 
   return {
     host,
     owner: parts[0],
     repo: parts[1],
     ref,
+    subpath,
   };
 }
 
@@ -138,16 +149,14 @@ export function isRepoSpec(spec: string): boolean {
     return false;
   }
 
-  // owner/repo format (must have exactly one /)
-  // But need to distinguish from things that aren't repos
-  const parts = trimmed.split("/");
-  if (parts.length === 2 && parts[0] && parts[1]) {
-    // Extract the repo part (before any @ or #)
-    const repoPart = parts[1].split("@")[0].split("#")[0];
+  // owner/repo or owner/repo/subpath format (2+ segments)
+  const pathPart = trimmed.split("@")[0].split("#")[0];
+  const parts = pathPart.split("/");
+  if (parts.length >= 2 && parts[0] && parts[1]) {
     // Valid usernames and repos: alphanumeric, hyphens, underscores
     // Repos can also have dots
     const validOwner = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(parts[0]);
-    const validRepo = /^[a-zA-Z0-9._-]+$/.test(repoPart);
+    const validRepo = /^[a-zA-Z0-9._-]+$/.test(parts[1]);
     return validOwner && validRepo;
   }
 
@@ -170,12 +179,12 @@ interface GitLabApiResponse {
  * Resolve a repo spec to full repository information using the appropriate API
  */
 export async function resolveRepo(spec: RepoSpec): Promise<ResolvedRepo> {
-  const { host, owner, repo, ref } = spec;
+  const { host, owner, repo, ref, subpath } = spec;
 
   if (host === "github.com") {
-    return resolveGitHubRepo(host, owner, repo, ref);
+    return resolveGitHubRepo(host, owner, repo, ref, subpath);
   } else if (host === "gitlab.com") {
-    return resolveGitLabRepo(host, owner, repo, ref);
+    return resolveGitLabRepo(host, owner, repo, ref, subpath);
   } else {
     // For unsupported hosts, assume default branch is "main"
     return {
@@ -185,6 +194,7 @@ export async function resolveRepo(spec: RepoSpec): Promise<ResolvedRepo> {
       ref: ref || "main",
       repoUrl: `https://${host}/${owner}/${repo}`,
       displayName: `${host}/${owner}/${repo}`,
+      subpath,
     };
   }
 }
@@ -194,6 +204,7 @@ async function resolveGitHubRepo(
   owner: string,
   repo: string,
   ref?: string,
+  subpath?: string,
 ): Promise<ResolvedRepo> {
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
 
@@ -231,6 +242,7 @@ async function resolveGitHubRepo(
     ref: resolvedRef,
     repoUrl: `https://github.com/${owner}/${repo}`,
     displayName: `${host}/${owner}/${repo}`,
+    subpath,
   };
 }
 
@@ -239,6 +251,7 @@ async function resolveGitLabRepo(
   owner: string,
   repo: string,
   ref?: string,
+  subpath?: string,
 ): Promise<ResolvedRepo> {
   const projectPath = encodeURIComponent(`${owner}/${repo}`);
   const apiUrl = `https://gitlab.com/api/v4/projects/${projectPath}`;
@@ -271,6 +284,7 @@ async function resolveGitLabRepo(
     ref: resolvedRef,
     repoUrl: `https://gitlab.com/${owner}/${repo}`,
     displayName: `${host}/${owner}/${repo}`,
+    subpath,
   };
 }
 

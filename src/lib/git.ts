@@ -256,6 +256,35 @@ async function cloneAtRef(
 }
 
 /**
+ * Clone with sparse checkout - fetches only the specified subpath
+ */
+async function cloneAtRefSparse(
+  git: SimpleGit,
+  repoUrl: string,
+  targetPath: string,
+  ref: string,
+  subpath: string,
+): Promise<{ success: boolean; ref?: string; error?: string }> {
+  try {
+    await git.clone(repoUrl, targetPath, [
+      "--filter=blob:none",
+      "--sparse",
+      "--branch",
+      ref,
+      "--single-branch",
+    ]);
+    const repoGit = simpleGit(targetPath);
+    await repoGit.raw(["sparse-checkout", "set", subpath]);
+    return { success: true, ref };
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to sparse clone: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
  * Fetch source code for a resolved package
  */
 export async function fetchSource(
@@ -364,17 +393,22 @@ export async function fetchRepoSource(
     await mkdir(parentDir, { recursive: true });
   }
 
-  // Clone the repository
-  const cloneResult = await cloneAtRef(
-    git,
-    resolved.repoUrl,
-    repoPath,
-    resolved.ref,
-  );
+  const cloneResult = resolved.subpath
+    ? await cloneAtRefSparse(
+        git,
+        resolved.repoUrl,
+        repoPath,
+        resolved.ref,
+        resolved.subpath,
+      )
+    : await cloneAtRef(git, resolved.repoUrl, repoPath, resolved.ref);
 
   if (!cloneResult.success) {
+    const displayName = resolved.subpath
+      ? `${resolved.displayName}/${resolved.subpath}`
+      : resolved.displayName;
     return {
-      package: resolved.displayName,
+      package: displayName,
       version: resolved.ref,
       path: getRepoRelativePath(resolved.displayName),
       success: false,
@@ -388,10 +422,17 @@ export async function fetchRepoSource(
     await rm(gitDir, { recursive: true, force: true });
   }
 
+  const displayName = resolved.subpath
+    ? `${resolved.displayName}/${resolved.subpath}`
+    : resolved.displayName;
+  const relativePath = resolved.subpath
+    ? `${getRepoRelativePath(resolved.displayName)}/${resolved.subpath}`
+    : getRepoRelativePath(resolved.displayName);
+
   return {
-    package: resolved.displayName,
+    package: displayName,
     version: resolved.ref,
-    path: getRepoRelativePath(resolved.displayName),
+    path: relativePath,
     success: true,
     error: cloneResult.error,
   };
