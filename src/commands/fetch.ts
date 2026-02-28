@@ -110,6 +110,9 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
   }
 
   const displayName = `${repoSpec.host}/${repoSpec.owner}/${repoSpec.repo}`;
+  const displayNameWithSubpath = repoSpec.subpath
+    ? `${displayName}/${repoSpec.subpath}`
+    : displayName;
   const logTarget = repoSpec.subpath
     ? `${repoSpec.owner}/${repoSpec.repo}/${repoSpec.subpath}`
     : `${repoSpec.owner}/${repoSpec.repo}`;
@@ -118,13 +121,16 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
   try {
     // Check if already exists with the same ref
     if (repoExists(displayName, cwd)) {
-      const existing = await getRepoInfo(displayName, cwd);
+      const existing = await getRepoInfo(displayNameWithSubpath, cwd);
       if (existing && repoSpec.ref && existing.version === repoSpec.ref) {
         console.log(`  ✓ Already up to date (${repoSpec.ref})`);
+        const relativePath = repoSpec.subpath
+          ? `${getRepoRelativePath(displayName)}/${repoSpec.subpath}`
+          : getRepoRelativePath(displayName);
         return {
-          package: displayName,
+          package: displayNameWithSubpath,
           version: existing.version,
-          path: getRepoRelativePath(displayName),
+          path: relativePath,
           success: true,
         };
       } else if (existing) {
@@ -161,7 +167,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.log(`  ✗ Error: ${errorMessage}`);
     return {
-      package: displayName,
+      package: displayNameWithSubpath,
       version: "",
       path: "",
       success: false,
