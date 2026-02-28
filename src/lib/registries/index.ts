@@ -2,11 +2,13 @@ import type { Registry, PackageSpec, ResolvedPackage } from "../../types.js";
 import { parseNpmSpec, resolveNpmPackage } from "./npm.js";
 import { parsePyPISpec, resolvePyPIPackage } from "./pypi.js";
 import { parseCratesSpec, resolveCrate } from "./crates.js";
+import { parseMavenSpec, resolveMavenPackage } from "./maven.js";
 import { isRepoSpec } from "../repo.js";
 
 export { resolveNpmPackage } from "./npm.js";
 export { resolvePyPIPackage } from "./pypi.js";
 export { resolveCrate } from "./crates.js";
+export { resolveMavenPackage } from "./maven.js";
 
 /**
  * Registry prefixes for explicit specification
@@ -19,6 +21,9 @@ const REGISTRY_PREFIXES: Record<string, Registry> = {
   "crates:": "crates",
   "cargo:": "crates",
   "rust:": "crates",
+  "maven:": "maven",
+  "mvn:": "maven",
+  "java:": "maven",
 };
 
 /**
@@ -49,7 +54,10 @@ export function detectRegistry(spec: string): {
 }
 
 /**
- * Parse a package specifier with registry detection
+ * Parse a package specifier with registry detection.
+ *
+ * For Maven packages, `name` is stored as "groupId:artifactId" so it
+ * round-trips cleanly through PackageSpec without changing the interface.
  */
 export function parsePackageSpec(spec: string): PackageSpec {
   const { registry, cleanSpec } = detectRegistry(spec);
@@ -67,6 +75,12 @@ export function parsePackageSpec(spec: string): PackageSpec {
     case "crates":
       ({ name, version } = parseCratesSpec(cleanSpec));
       break;
+    case "maven": {
+      const { groupId, artifactId, version: v } = parseMavenSpec(cleanSpec);
+      name = `${groupId}:${artifactId}`;
+      version = v;
+      break;
+    }
   }
 
   return { registry, name, version };
@@ -87,6 +101,12 @@ export async function resolvePackage(
       return resolvePyPIPackage(name, version);
     case "crates":
       return resolveCrate(name, version);
+    case "maven": {
+      const colonIdx = name.indexOf(":");
+      const groupId = name.slice(0, colonIdx);
+      const artifactId = name.slice(colonIdx + 1);
+      return resolveMavenPackage(groupId, artifactId, version);
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 /**
  * Supported package registries
  */
-export type Registry = "npm" | "pypi" | "crates";
+export type Registry = "npm" | "pypi" | "crates" | "maven";
 
 export interface PackageInfo {
   name: string;
