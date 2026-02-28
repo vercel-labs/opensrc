@@ -15,6 +15,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -25,6 +26,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: "v14.0.0",
+        subpath: undefined,
       });
     });
 
@@ -35,6 +37,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: "main",
+        subpath: undefined,
       });
     });
   });
@@ -47,6 +50,7 @@ describe("parseRepoSpec", () => {
         owner: "gitlab-org",
         repo: "gitlab",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -57,6 +61,7 @@ describe("parseRepoSpec", () => {
         owner: "gitlab-org",
         repo: "gitlab",
         ref: "v16.0.0",
+        subpath: undefined,
       });
     });
   });
@@ -69,6 +74,7 @@ describe("parseRepoSpec", () => {
         owner: "atlassian",
         repo: "python-bitbucket",
         ref: undefined,
+        subpath: undefined,
       });
     });
   });
@@ -81,6 +87,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "ai",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -91,6 +98,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "ai",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -101,6 +109,31 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "ai",
         ref: "canary",
+        subpath: undefined,
+      });
+    });
+
+    it("parses https://github.com/owner/repo/tree/branch/subpath", () => {
+      const result = parseRepoSpec(
+        "https://github.com/vercel/ai/tree/main/packages/ai",
+      );
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: "main",
+        subpath: "packages/ai",
+      });
+    });
+
+    it("parses https://github.com/owner/repo with subpath (no tree)", () => {
+      const result = parseRepoSpec("https://github.com/vercel/ai/packages/ai");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: undefined,
+        subpath: "packages/ai",
       });
     });
 
@@ -111,6 +144,7 @@ describe("parseRepoSpec", () => {
         owner: "gitlab-org",
         repo: "gitlab",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -121,6 +155,7 @@ describe("parseRepoSpec", () => {
         owner: "owner",
         repo: "repo",
         ref: undefined,
+        subpath: undefined,
       });
     });
   });
@@ -133,6 +168,18 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: undefined,
+        subpath: undefined,
+      });
+    });
+
+    it("parses github.com/owner/repo/subpath", () => {
+      const result = parseRepoSpec("github.com/vercel/ai/packages/ai");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: undefined,
+        subpath: "packages/ai",
       });
     });
 
@@ -143,6 +190,7 @@ describe("parseRepoSpec", () => {
         owner: "gitlab-org",
         repo: "gitlab",
         ref: undefined,
+        subpath: undefined,
       });
     });
   });
@@ -155,6 +203,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -165,6 +214,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: "v14.0.0",
+        subpath: undefined,
       });
     });
 
@@ -175,6 +225,51 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "ai",
         ref: "main",
+        subpath: undefined,
+      });
+    });
+
+    it("parses owner/repo/subpath (monorepo subdirectory)", () => {
+      const result = parseRepoSpec("vercel/ai/packages/ai");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: undefined,
+        subpath: "packages/ai",
+      });
+    });
+
+    it("parses owner/repo/subpath with ref", () => {
+      const result = parseRepoSpec("vercel/ai/packages/ai@main");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: "main",
+        subpath: "packages/ai",
+      });
+    });
+
+    it("parses owner/repo/nested/subpath", () => {
+      const result = parseRepoSpec("facebook/react/packages/react");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "facebook",
+        repo: "react",
+        ref: undefined,
+        subpath: "packages/react",
+      });
+    });
+
+    it("parses github:owner/repo/subpath", () => {
+      const result = parseRepoSpec("github:vercel/ai/packages/ai");
+      expect(result).toEqual({
+        host: "github.com",
+        owner: "vercel",
+        repo: "ai",
+        ref: undefined,
+        subpath: "packages/ai",
       });
     });
 
@@ -185,6 +280,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "next.js",
         ref: undefined,
+        subpath: undefined,
       });
     });
 
@@ -195,6 +291,7 @@ describe("parseRepoSpec", () => {
         owner: "facebook",
         repo: "react-native",
         ref: undefined,
+        subpath: undefined,
       });
     });
   });
@@ -224,6 +321,7 @@ describe("parseRepoSpec", () => {
         owner: "vercel",
         repo: "ai",
         ref: undefined,
+        subpath: undefined,
       });
     });
   });
@@ -268,6 +366,11 @@ describe("isRepoSpec", () => {
     it("owner/repo with ref", () => {
       expect(isRepoSpec("vercel/ai@main")).toBe(true);
       expect(isRepoSpec("vercel/ai#canary")).toBe(true);
+    });
+
+    it("owner/repo/subpath (monorepo subdirectory)", () => {
+      expect(isRepoSpec("vercel/ai/packages/ai")).toBe(true);
+      expect(isRepoSpec("facebook/react/packages/react")).toBe(true);
     });
   });
 

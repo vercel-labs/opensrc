@@ -110,20 +110,27 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
   }
 
   const displayName = `${repoSpec.host}/${repoSpec.owner}/${repoSpec.repo}`;
-  console.log(
-    `\nFetching ${repoSpec.owner}/${repoSpec.repo} from ${repoSpec.host}...`,
-  );
+  const displayNameWithSubpath = repoSpec.subpath
+    ? `${displayName}/${repoSpec.subpath}`
+    : displayName;
+  const logTarget = repoSpec.subpath
+    ? `${repoSpec.owner}/${repoSpec.repo}/${repoSpec.subpath}`
+    : `${repoSpec.owner}/${repoSpec.repo}`;
+  console.log(`\nFetching ${logTarget} from ${repoSpec.host}...`);
 
   try {
     // Check if already exists with the same ref
     if (repoExists(displayName, cwd)) {
-      const existing = await getRepoInfo(displayName, cwd);
+      const existing = await getRepoInfo(displayNameWithSubpath, cwd);
       if (existing && repoSpec.ref && existing.version === repoSpec.ref) {
         console.log(`  ✓ Already up to date (${repoSpec.ref})`);
+        const relativePath = repoSpec.subpath
+          ? `${getRepoRelativePath(displayName)}/${repoSpec.subpath}`
+          : getRepoRelativePath(displayName);
         return {
-          package: displayName,
+          package: displayNameWithSubpath,
           version: existing.version,
-          path: getRepoRelativePath(displayName),
+          path: relativePath,
           success: true,
         };
       } else if (existing) {
@@ -140,7 +147,10 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     console.log(`  → Ref: ${resolved.ref}`);
 
     // Fetch the source
-    console.log(`  → Cloning at ${resolved.ref}...`);
+    const cloneMsg = resolved.subpath
+      ? `  → Sparse cloning ${resolved.subpath} at ${resolved.ref}...`
+      : `  → Cloning at ${resolved.ref}...`;
+    console.log(cloneMsg);
     const result = await fetchRepoSource(resolved, cwd);
 
     if (result.success) {
@@ -157,7 +167,7 @@ async function fetchRepoInput(spec: string, cwd: string): Promise<FetchResult> {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.log(`  ✗ Error: ${errorMessage}`);
     return {
-      package: displayName,
+      package: displayNameWithSubpath,
       version: "",
       path: "",
       success: false,

@@ -232,5 +232,9 @@ describe("detectInputType", () => {
     it("GitLab URL", () => {
       expect(detectInputType("https://gitlab.com/owner/repo")).toBe("repo");
     });
+
+    it("owner/repo/subpath (monorepo subdirectory)", () => {
+      expect(detectInputType("vercel/ai/packages/ai")).toBe("repo");
+    });
   });
 });

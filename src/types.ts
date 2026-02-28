@@ -60,6 +60,7 @@ export interface RepoSpec {
   owner: string;
   repo: string;
   ref?: string; // branch, tag, or commit
+  subpath?: string; // e.g., "packages/ai" for monorepo subdirectory
 }
 
 /**
@@ -86,4 +87,5 @@ export interface ResolvedRepo {
   ref: string; // branch, tag, or commit (resolved)
   repoUrl: string;
   displayName: string; // e.g., "github.com/owner/repo"
+  subpath?: string; // e.g., "packages/ai" for monorepo subdirectory
 }
