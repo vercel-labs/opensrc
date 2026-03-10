@@ -9,6 +9,11 @@ const SOURCES_FILE = "sources.json";
 const SECTION_START = "## Source Code Reference";
 const SECTION_MARKER = "<!-- opensrc:start -->";
 const SECTION_END_MARKER = "<!-- opensrc:end -->";
+const DISABLE_AGENTS_MD_ENV = "OPENSRC_DISABLE_AGENTS_MD";
+
+function isAgentsMdDisabledByEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[DISABLE_AGENTS_MD_ENV] === "1";
+}
 
 /**
  * Get the section content (without leading newline for comparison)
@@ -147,6 +152,10 @@ function extractSection(content: string): string | null {
 export async function ensureAgentsMd(
   cwd: string = process.cwd(),
 ): Promise<boolean> {
+  if (isAgentsMdDisabledByEnv()) {
+    return false;
+  }
+
   const agentsPath = join(cwd, AGENTS_FILE);
   const newSection = getSectionContent();
 
@@ -208,6 +217,10 @@ export async function updateAgentsMd(
   // Always update the index file
   await updatePackageIndex(sources, cwd);
 
+  if (isAgentsMdDisabledByEnv()) {
+    return false;
+  }
+
   if (sources.packages.length > 0 || sources.repos.length > 0) {
     return ensureAgentsMd(cwd);
   }
@@ -221,6 +234,10 @@ export async function updateAgentsMd(
 export async function removeOpensrcSection(
   cwd: string = process.cwd(),
 ): Promise<boolean> {
+  if (isAgentsMdDisabledByEnv()) {
+    return false;
+  }
+
   const agentsPath = join(cwd, AGENTS_FILE);
 
   if (!existsSync(agentsPath)) {

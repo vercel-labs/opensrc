@@ -4,25 +4,9 @@ import { existsSync } from "fs";
 
 const OPENSRC_DIR = "opensrc";
 const SETTINGS_FILE = "settings.json";
-const DISABLE_MODIFY_ENV = "OPENSRC_DISABLE_MODIFY";
 
 export interface OpensrcSettings {
   allowFileModifications?: boolean;
-}
-
-/**
- * Returns true when file modifications are disabled by environment variable.
- */
-export function isFileModificationDisabledByEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  const value = env[DISABLE_MODIFY_ENV];
-  if (!value) {
-    return false;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === "1";
 }
 
 /**

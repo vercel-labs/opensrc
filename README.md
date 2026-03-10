@@ -92,13 +92,13 @@ opensrc zod --modify
 opensrc zod --modify=false
 ```
 
-You can also disable file modifications via environment variable:
+You can also disable AGENTS.md updates via environment variable:
 
 ```bash
-OPENSRC_DISABLE_MODIFY=1 opensrc zod
+OPENSRC_DISABLE_AGENTS_MD=1 opensrc zod
 ```
 
-This disables modifications to `.gitignore`, `tsconfig.json`, and `AGENTS.md`.
+This skips only `AGENTS.md` updates and still allows `.gitignore` and `tsconfig.json` updates.
 
 ## How it works
 

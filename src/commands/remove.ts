@@ -12,10 +12,7 @@ import {
   type RepoEntry,
 } from "../lib/agents.js";
 import { isRepoSpec } from "../lib/repo.js";
-import {
-  getFileModificationPermission,
-  isFileModificationDisabledByEnv,
-} from "../lib/settings.js";
+import { getFileModificationPermission } from "../lib/settings.js";
 import { detectRegistry } from "../lib/registries/index.js";
 import type { Registry } from "../types.js";
 
@@ -136,9 +133,7 @@ export async function removeCommand(
     );
 
     // Check if file modifications are allowed
-    const canModifyFiles = isFileModificationDisabledByEnv()
-      ? false
-      : await getFileModificationPermission(cwd);
+    const canModifyFiles = await getFileModificationPermission(cwd);
 
     if (canModifyFiles) {
       const agentsUpdated = await updateAgentsMd(
