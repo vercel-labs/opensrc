@@ -26,6 +26,7 @@ import {
 } from "../lib/agents.js";
 import {
   getFileModificationPermission,
+  isFileModificationDisabledByEnv,
   setFileModificationPermission,
 } from "../lib/settings.js";
 import { confirm } from "../lib/prompt.js";
@@ -52,6 +53,11 @@ async function checkFileModificationPermission(
       console.log("✗ File modifications disabled (--modify=false)");
     }
     return cliOverride;
+  }
+
+  if (isFileModificationDisabledByEnv()) {
+    console.log("✗ File modifications disabled (OPENSRC_DISABLE_MODIFY=1)");
+    return false;
   }
 
   const storedPermission = await getFileModificationPermission(cwd);

@@ -92,6 +92,14 @@ opensrc zod --modify
 opensrc zod --modify=false
 ```
 
+You can also disable file modifications via environment variable:
+
+```bash
+OPENSRC_DISABLE_MODIFY=1 opensrc zod
+```
+
+This disables modifications to `.gitignore`, `tsconfig.json`, and `AGENTS.md`.
+
 ## How it works
 
 1. Queries the npm registry to find the package's repository URL
