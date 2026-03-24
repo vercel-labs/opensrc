@@ -232,6 +232,44 @@ describe("updatePackageIndex", () => {
   });
 });
 
+describe("OPENSRC_DISABLE_AGENTS_MD", () => {
+  it("ensureAgentsMd returns false without touching file when env var is set", async () => {
+    process.env.OPENSRC_DISABLE_AGENTS_MD = "1";
+    try {
+      const result = await ensureAgentsMd(TEST_DIR);
+      expect(result).toBe(false);
+      expect(existsSync(AGENTS_FILE)).toBe(false);
+    } finally {
+      delete process.env.OPENSRC_DISABLE_AGENTS_MD;
+    }
+  });
+
+  it("updateAgentsMd skips AGENTS.md but still updates sources.json when env var is set", async () => {
+    process.env.OPENSRC_DISABLE_AGENTS_MD = "1";
+    try {
+      const sources = {
+        packages: [
+          {
+            name: "zod",
+            version: "3.22.0",
+            registry: "npm" as const,
+            path: "repos/github.com/colinhacks/zod",
+            fetchedAt: "2024-01-01T00:00:00.000Z",
+          },
+        ],
+        repos: [],
+      };
+
+      await updateAgentsMd(sources, TEST_DIR);
+
+      expect(existsSync(SOURCES_FILE)).toBe(true);
+      expect(existsSync(AGENTS_FILE)).toBe(false);
+    } finally {
+      delete process.env.OPENSRC_DISABLE_AGENTS_MD;
+    }
+  });
+});
+
 describe("updateAgentsMd", () => {
   it("updates both sources.json and AGENTS.md", async () => {
     const sources = {
@@ -278,10 +316,7 @@ describe("updateAgentsMd", () => {
     const contentBefore = await readFile(AGENTS_FILE, "utf-8");
     expect(contentBefore).toContain(SECTION_MARKER);
 
-    const result = await updateAgentsMd(
-      { packages: [], repos: [] },
-      TEST_DIR,
-    );
+    const result = await updateAgentsMd({ packages: [], repos: [] }, TEST_DIR);
     expect(result).toBe(true);
 
     const contentAfter = await readFile(AGENTS_FILE, "utf-8");

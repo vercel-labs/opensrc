@@ -142,11 +142,22 @@ function extractSection(content: string): string | null {
 }
 
 /**
+ * Check if AGENTS.md updates are disabled via environment variable.
+ * Set OPENSRC_DISABLE_AGENTS_MD=1 to skip all AGENTS.md modifications.
+ */
+function isAgentsMdDisabled(): boolean {
+  return process.env.OPENSRC_DISABLE_AGENTS_MD === "1";
+}
+
+/**
  * Ensure AGENTS.md has the opensrc section (add or update)
  */
 export async function ensureAgentsMd(
   cwd: string = process.cwd(),
 ): Promise<boolean> {
+  if (isAgentsMdDisabled()) {
+    return false;
+  }
   const agentsPath = join(cwd, AGENTS_FILE);
   const newSection = getSectionContent();
 
