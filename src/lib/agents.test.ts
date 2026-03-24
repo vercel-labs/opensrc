@@ -268,6 +268,31 @@ describe("OPENSRC_DISABLE_AGENTS_MD", () => {
       delete process.env.OPENSRC_DISABLE_AGENTS_MD;
     }
   });
+
+  it("updateAgentsMd with empty sources does not touch AGENTS.md when env var is set", async () => {
+    // Pre-create AGENTS.md with opensrc section
+    const pkg = {
+      name: "zod",
+      version: "3.22.0",
+      registry: "npm" as const,
+      path: "repos/github.com/colinhacks/zod",
+      fetchedAt: "2024-01-01T00:00:00.000Z",
+    };
+    await updateAgentsMd({ packages: [pkg], repos: [] }, TEST_DIR);
+    const contentBefore = await readFile(AGENTS_FILE, "utf-8");
+    expect(contentBefore).toContain(SECTION_MARKER);
+
+    process.env.OPENSRC_DISABLE_AGENTS_MD = "1";
+    try {
+      await updateAgentsMd({ packages: [], repos: [] }, TEST_DIR);
+
+      // AGENTS.md should be untouched — section still present
+      const contentAfter = await readFile(AGENTS_FILE, "utf-8");
+      expect(contentAfter).toContain(SECTION_MARKER);
+    } finally {
+      delete process.env.OPENSRC_DISABLE_AGENTS_MD;
+    }
+  });
 });
 
 describe("updateAgentsMd", () => {

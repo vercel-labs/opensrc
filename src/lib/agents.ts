@@ -219,6 +219,10 @@ export async function updateAgentsMd(
   // Always update the index file
   await updatePackageIndex(sources, cwd);
 
+  if (isAgentsMdDisabled()) {
+    return false;
+  }
+
   if (sources.packages.length > 0 || sources.repos.length > 0) {
     return ensureAgentsMd(cwd);
   }
