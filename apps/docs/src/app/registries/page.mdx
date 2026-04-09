@@ -1,0 +1,70 @@
+# Registries
+
+opensrc resolves packages from multiple registries. The registry is detected automatically from the input format.
+
+## npm
+
+The default registry. Pass a package name directly:
+
+```bash
+rg "ZodType" $(opensrc path zod)
+cat $(opensrc path next)/package.json
+opensrc path @vercel/ai
+```
+
+## PyPI
+
+Use the `pypi:` prefix for Python packages:
+
+```bash
+find $(opensrc path pypi:requests) -name "*.py"
+cat $(opensrc path pypi:flask)/src/flask/app.py
+opensrc path pypi:pydantic
+```
+
+## crates.io
+
+Use the `crates:` prefix for Rust crates:
+
+```bash
+ls $(opensrc path crates:serde)/src/
+rg "derive" $(opensrc path crates:clap)
+opensrc path crates:tokio
+```
+
+## GitHub
+
+Pass `owner/repo` to fetch from GitHub directly:
+
+```bash
+rg "Router" $(opensrc path vercel/next.js)/packages/next/src/
+cat $(opensrc path facebook/react)/packages/react/src/React.js
+opensrc path tokio-rs/tokio
+```
+
+## GitLab
+
+Use the `gitlab:` prefix:
+
+```bash
+opensrc path gitlab:owner/repo
+```
+
+## Bitbucket
+
+Use the `bitbucket:` prefix:
+
+```bash
+opensrc path bitbucket:owner/repo
+```
+
+## Summary
+
+| Registry | Prefix | Example |
+|----------|--------|---------|
+| npm | _(none)_ | `opensrc path zod` |
+| PyPI | `pypi:` | `opensrc path pypi:requests` |
+| crates.io | `crates:` | `opensrc path crates:serde` |
+| GitHub | `owner/repo` | `opensrc path vercel/ai` |
+| GitLab | `gitlab:` | `opensrc path gitlab:owner/repo` |
+| Bitbucket | `bitbucket:` | `opensrc path bitbucket:owner/repo` |

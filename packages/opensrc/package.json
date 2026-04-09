@@ -1,0 +1,40 @@
+{
+  "name": "opensrc",
+  "version": "0.6.0",
+  "description": "Fetch source code for packages to give coding agents deeper context",
+  "type": "module",
+  "bin": {
+    "opensrc": "./bin/opensrc.js"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "skills",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vercel-labs/opensrc"
+  },
+  "scripts": {
+    "version": "npm run version:sync && git add cli/Cargo.toml cli/Cargo.lock",
+    "version:sync": "node scripts/sync-version.js",
+    "version:check": "node scripts/check-version-sync.js",
+    "build:native": "npm run version:sync && cargo build --release --manifest-path cli/Cargo.toml && node scripts/copy-native.js",
+    "build:native:debug": "cargo build --manifest-path cli/Cargo.toml && node scripts/copy-native.js",
+    "postinstall": "node scripts/postinstall.js",
+    "test": "cargo test --manifest-path cli/Cargo.toml",
+    "format": "cargo fmt --manifest-path cli/Cargo.toml",
+    "format:check": "cargo fmt --manifest-path cli/Cargo.toml -- --check",
+    "lint": "cargo clippy --manifest-path cli/Cargo.toml -- -D warnings"
+  },
+  "keywords": [
+    "cli",
+    "source-code",
+    "npm",
+    "packages",
+    "ai",
+    "coding-agents"
+  ],
+  "license": "Apache-2.0"
+}

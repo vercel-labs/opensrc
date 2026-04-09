@@ -1,0 +1,38 @@
+# Getting Started
+
+opensrc gives coding agents access to any package's source code. Use `opensrc path` inside other commands to search, read, or explore implementations — not just types.
+
+## Install
+
+```bash
+npm install -g opensrc
+```
+
+## Usage
+
+Search a package's source with `rg`, `grep`, or any tool:
+
+```bash
+rg "parse" $(opensrc path zod)
+```
+
+Read a specific file:
+
+```bash
+cat $(opensrc path zod)/src/types.ts
+```
+
+Works with any registry:
+
+```bash
+find $(opensrc path pypi:requests) -name "*.py"
+ls $(opensrc path crates:serde)/src/
+grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
+```
+
+`opensrc path` fetches on first use, then returns the cached path instantly. Progress goes to stderr, the path to stdout, so `$(opensrc path ...)` works in subshells.
+
+## Requirements
+
+- Node.js 18+
+- Git (for cloning repositories)

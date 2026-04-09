@@ -1,0 +1,72 @@
+# Commands
+
+## path
+
+Print the absolute path to a package's source code, fetching automatically on cache miss. This is the primary command for using opensrc — compose it with any shell tool:
+
+```bash
+rg "parse" $(opensrc path zod)
+cat $(opensrc path zod)/src/types.ts
+find $(opensrc path pypi:requests) -name "*.py"
+ls $(opensrc path crates:serde)/src/
+grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
+```
+
+Progress output goes to stderr, the path to stdout, so `$(opensrc path ...)` works cleanly in subshells.
+
+### Multiple packages
+
+Pass multiple specs to print one path per line:
+
+```bash
+opensrc path zod react next
+opensrc path pypi:requests pypi:flask
+opensrc path crates:serde crates:tokio
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--cwd <path>` | Working directory for lockfile version resolution |
+| `--verbose` | Show progress during fetch |
+
+## list
+
+List all cached packages and repositories:
+
+```bash
+opensrc list
+opensrc list --json
+```
+
+## remove
+
+Remove a specific package or repository from the cache:
+
+```bash
+opensrc remove zod
+opensrc remove pypi:requests
+opensrc remove vercel/ai
+```
+
+## clean
+
+Clean the entire cache, or filter by type:
+
+```bash
+opensrc clean
+opensrc clean --packages
+opensrc clean --repos
+opensrc clean --npm
+opensrc clean --pypi
+opensrc clean --crates
+```
+
+| Flag | Description |
+|------|-------------|
+| `--packages` | Only clean packages (not repos) |
+| `--repos` | Only clean repositories |
+| `--npm` | Only clean npm packages |
+| `--pypi` | Only clean PyPI packages |
+| `--crates` | Only clean crates.io packages |
