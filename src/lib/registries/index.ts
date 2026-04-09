@@ -2,11 +2,13 @@ import type { Registry, PackageSpec, ResolvedPackage } from "../../types.js";
 import { parseNpmSpec, resolveNpmPackage } from "./npm.js";
 import { parsePyPISpec, resolvePyPIPackage } from "./pypi.js";
 import { parseCratesSpec, resolveCrate } from "./crates.js";
+import { parseNuGetSpec, resolveNuGetPackage } from "./nuget.js";
 import { isRepoSpec } from "../repo.js";
 
 export { resolveNpmPackage } from "./npm.js";
 export { resolvePyPIPackage } from "./pypi.js";
 export { resolveCrate } from "./crates.js";
+export { resolveNuGetPackage } from "./nuget.js";
 
 /**
  * Registry prefixes for explicit specification
@@ -19,6 +21,9 @@ const REGISTRY_PREFIXES: Record<string, Registry> = {
   "crates:": "crates",
   "cargo:": "crates",
   "rust:": "crates",
+  "nuget:": "nuget",
+  "dotnet:": "nuget",
+  "nupkg:": "nuget",
 };
 
 /**
@@ -67,6 +72,9 @@ export function parsePackageSpec(spec: string): PackageSpec {
     case "crates":
       ({ name, version } = parseCratesSpec(cleanSpec));
       break;
+    case "nuget":
+      ({ name, version } = parseNuGetSpec(cleanSpec));
+      break;
   }
 
   return { registry, name, version };
@@ -78,7 +86,7 @@ export function parsePackageSpec(spec: string): PackageSpec {
 export async function resolvePackage(
   spec: PackageSpec,
 ): Promise<ResolvedPackage> {
-  const { registry, name, version } = spec;
+  const { registry, name, version, allowPrerelease } = spec;
 
   switch (registry) {
     case "npm":
@@ -87,6 +95,8 @@ export async function resolvePackage(
       return resolvePyPIPackage(name, version);
     case "crates":
       return resolveCrate(name, version);
+    case "nuget":
+      return resolveNuGetPackage(name, version, { allowPrerelease });
   }
 }
 

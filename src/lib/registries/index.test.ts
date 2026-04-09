@@ -85,6 +85,29 @@ describe("detectRegistry", () => {
     });
   });
 
+  describe("nuget registry", () => {
+    it("detects nuget: prefix", () => {
+      expect(detectRegistry("nuget:Newtonsoft.Json")).toEqual({
+        registry: "nuget",
+        cleanSpec: "Newtonsoft.Json",
+      });
+    });
+
+    it("detects dotnet: alias", () => {
+      expect(detectRegistry("dotnet:Serilog")).toEqual({
+        registry: "nuget",
+        cleanSpec: "Serilog",
+      });
+    });
+
+    it("detects nupkg: alias", () => {
+      expect(detectRegistry("nupkg:Microsoft.Extensions.Logging")).toEqual({
+        registry: "nuget",
+        cleanSpec: "Microsoft.Extensions.Logging",
+      });
+    });
+  });
+
   describe("preserves version in cleanSpec", () => {
     it("npm with version", () => {
       expect(detectRegistry("npm:lodash@4.17.21")).toEqual({
@@ -104,6 +127,13 @@ describe("detectRegistry", () => {
       expect(detectRegistry("crates:serde@1.0.0")).toEqual({
         registry: "crates",
         cleanSpec: "serde@1.0.0",
+      });
+    });
+
+    it("nuget with version", () => {
+      expect(detectRegistry("nuget:Serilog@3.1.0")).toEqual({
+        registry: "nuget",
+        cleanSpec: "Serilog@3.1.0",
       });
     });
   });
@@ -179,6 +209,24 @@ describe("parsePackageSpec", () => {
       });
     });
   });
+
+  describe("nuget packages", () => {
+    it("parses nuget package", () => {
+      expect(parsePackageSpec("nuget:Newtonsoft.Json")).toEqual({
+        registry: "nuget",
+        name: "Newtonsoft.Json",
+        version: undefined,
+      });
+    });
+
+    it("parses nuget package with version", () => {
+      expect(parsePackageSpec("dotnet:Serilog@3.1.0")).toEqual({
+        registry: "nuget",
+        name: "Serilog",
+        version: "3.1.0",
+      });
+    });
+  });
 });
 
 describe("detectInputType", () => {
@@ -201,6 +249,10 @@ describe("detectInputType", () => {
 
     it("crates package", () => {
       expect(detectInputType("crates:serde")).toBe("package");
+    });
+
+    it("nuget package", () => {
+      expect(detectInputType("nuget:Newtonsoft.Json")).toBe("package");
     });
 
     it("package with version", () => {

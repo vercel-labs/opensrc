@@ -27,9 +27,13 @@ export function createProgram(): Command {
   program
     .argument(
       "[packages...]",
-      "packages or repos to fetch (e.g., zod, pypi:requests, crates:serde, owner/repo)",
+      "packages or repos to fetch (e.g., zod, pypi:requests, crates:serde, nuget:Newtonsoft.Json, owner/repo)",
     )
     .option("--cwd <path>", "working directory (default: current directory)")
+    .option(
+      "--allow-prerelease",
+      "allow prerelease versions when resolving latest NuGet packages",
+    )
     .option(
       "--modify [value]",
       "allow/deny modifying .gitignore, tsconfig.json, AGENTS.md",
@@ -42,7 +46,7 @@ export function createProgram(): Command {
     .action(
       async (
         packages: string[],
-        options: { cwd?: string; modify?: boolean },
+        options: { cwd?: string; modify?: boolean; allowPrerelease?: boolean },
       ) => {
         if (packages.length === 0) {
           program.help();
@@ -52,6 +56,7 @@ export function createProgram(): Command {
         await fetchCommand(packages, {
           cwd: options.cwd,
           allowModifications: options.modify,
+          allowPrerelease: options.allowPrerelease,
         });
       },
     );
@@ -90,6 +95,7 @@ export function createProgram(): Command {
     .option("--npm", "only remove npm packages")
     .option("--pypi", "only remove PyPI packages")
     .option("--crates", "only remove crates.io packages")
+    .option("--nuget", "only remove NuGet packages")
     .option("--cwd <path>", "working directory (default: current directory)")
     .action(
       async (options: {
@@ -98,12 +104,14 @@ export function createProgram(): Command {
         npm?: boolean;
         pypi?: boolean;
         crates?: boolean;
+        nuget?: boolean;
         cwd?: string;
       }) => {
         let registry: Registry | undefined;
         if (options.npm) registry = "npm";
         else if (options.pypi) registry = "pypi";
         else if (options.crates) registry = "crates";
+        else if (options.nuget) registry = "nuget";
 
         await cleanCommand({
           packages: options.packages || !!registry,

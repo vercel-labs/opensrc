@@ -34,7 +34,7 @@ afterEach(async () => {
 describe("path helpers", () => {
   describe("getOpensrcDir", () => {
     it("returns opensrc directory path", () => {
-      expect(getOpensrcDir("/project")).toBe("/project/opensrc");
+      expect(getOpensrcDir("/project")).toBe(join("/project", "opensrc"));
     });
 
     it("uses cwd by default", () => {
@@ -44,20 +44,22 @@ describe("path helpers", () => {
 
   describe("getReposDir", () => {
     it("returns repos directory path", () => {
-      expect(getReposDir("/project")).toBe("/project/opensrc/repos");
+      expect(getReposDir("/project")).toBe(
+        join("/project", "opensrc", "repos"),
+      );
     });
   });
 
   describe("getRepoPath", () => {
     it("returns full path for repo", () => {
       expect(getRepoPath("github.com/vercel/ai", "/project")).toBe(
-        "/project/opensrc/repos/github.com/vercel/ai",
+        join("/project", "opensrc", "repos", "github.com", "vercel", "ai"),
       );
     });
 
     it("handles different hosts", () => {
       expect(getRepoPath("gitlab.com/owner/repo", "/project")).toBe(
-        "/project/opensrc/repos/gitlab.com/owner/repo",
+        join("/project", "opensrc", "repos", "gitlab.com", "owner", "repo"),
       );
     });
   });
