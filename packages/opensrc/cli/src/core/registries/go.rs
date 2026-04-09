@@ -79,10 +79,28 @@ fn repo_url_from_module_path(module: &str) -> Option<String> {
     }
 }
 
+/// Rewrite go.googlesource.com URLs to their GitHub mirrors.
+/// Google maintains official mirrors at github.com/golang/* for all
+/// golang.org/x/* modules. The GitHub URL is needed because the cache
+/// system expects host/owner/repo structure.
+fn normalize_googlesource_url(url: &str) -> Option<String> {
+    if url.contains("go.googlesource.com") {
+        // https://go.googlesource.com/tools -> https://github.com/golang/tools
+        let repo_name = url.rsplit('/').next()?;
+        Some(format!("https://github.com/golang/{repo_name}"))
+    } else {
+        None
+    }
+}
+
 fn extract_repo_url(info: &GoModuleInfo, module: &str) -> Option<String> {
     // Prefer Origin.URL from the proxy response
     if let Some(ref origin) = info.origin {
         if let Some(ref url) = origin.url {
+            // Rewrite googlesource URLs to GitHub mirrors
+            if let Some(github_url) = normalize_googlesource_url(url) {
+                return Some(github_url);
+            }
             return Some(normalize_repo_url(url));
         }
     }
@@ -159,5 +177,21 @@ mod tests {
     fn test_repo_url_from_module_path_too_short() {
         let url = repo_url_from_module_path("golang.org/x");
         assert_eq!(url, None);
+    }
+
+    #[test]
+    fn test_normalize_googlesource_url() {
+        assert_eq!(
+            normalize_googlesource_url("https://go.googlesource.com/tools"),
+            Some("https://github.com/golang/tools".into())
+        );
+    }
+
+    #[test]
+    fn test_normalize_googlesource_url_not_googlesource() {
+        assert_eq!(
+            normalize_googlesource_url("https://github.com/gin-gonic/gin"),
+            None
+        );
     }
 }
