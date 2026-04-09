@@ -115,13 +115,15 @@ pub fn resolve_npm_package(
     };
 
     if !info.versions.contains_key(&resolved_version) {
-        let recent: Vec<&String> = info.versions.keys().collect::<Vec<_>>();
-        let tail: Vec<&&String> = recent.iter().rev().take(5).collect();
-        let versions_str = tail
+        let mut sorted_versions: Vec<&String> = info.versions.keys().collect();
+        sorted_versions.sort();
+        let tail: Vec<&str> = sorted_versions
             .iter()
+            .rev()
+            .take(5)
             .map(|v| v.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
+            .collect();
+        let versions_str = tail.into_iter().rev().collect::<Vec<_>>().join(", ");
         return Err(format!(
             "Version \"{resolved_version}\" not found for \"{name}\". Recent versions: {versions_str}"
         )

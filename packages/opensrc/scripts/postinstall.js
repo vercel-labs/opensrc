@@ -114,7 +114,7 @@ async function downloadText(url) {
 async function verifyChecksum(filePath, fileName) {
   try {
     const checksums = await downloadText(CHECKSUMS_URL);
-    const line = checksums.split('\n').find((l) => l.includes(fileName));
+    const line = checksums.split('\n').find((l) => l.trim().endsWith(fileName));
     if (!line) {
       console.log('⚠ No checksum entry found for this binary, skipping verification');
       return true;
