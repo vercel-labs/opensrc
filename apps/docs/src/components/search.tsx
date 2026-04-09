@@ -73,9 +73,13 @@ export function Search() {
         if (res.ok) {
           const data = await res.json();
           setResults(data.results);
+        } else {
+          setResults([]);
         }
       } catch {
-        // aborted or network error
+        if (!controller.signal.aborted) {
+          setResults([]);
+        }
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);

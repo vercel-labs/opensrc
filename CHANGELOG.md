@@ -1,8 +1,8 @@
 # opensrc
 
+<!-- release:start -->
 ## 0.6.0
 
-<!-- release:start -->
 ### New Features
 
 - **Global cache** — Switch from per-project `opensrc/` folder to a global `~/.opensrc/` cache, shared across all projects

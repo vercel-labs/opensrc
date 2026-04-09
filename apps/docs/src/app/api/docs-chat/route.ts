@@ -138,6 +138,16 @@ export async function POST(req: Request) {
     );
   }
 
+  if (messages.length > 50) {
+    return new Response(
+      JSON.stringify({
+        error: "Bad request",
+        message: "Too many messages. Please start a new conversation.",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const docsFiles = await loadDocsFiles();
   const {
     tools: { bash, readFile: readFileTool },
