@@ -1,24 +1,20 @@
 use std::path::PathBuf;
 
-use crate::lib::cache::{
+use crate::core::cache::{
     get_absolute_path, get_package_info, get_repo_info, list_sources, now_iso, write_sources,
     PackageEntry, RepoEntry,
 };
-use crate::lib::git::{fetch_repo_source, fetch_source};
-use crate::lib::registries::repo::{parse_repo_spec, resolve_repo};
-use crate::lib::registries::{
+use crate::core::git::{fetch_repo_source, fetch_source};
+use crate::core::registries::repo::{parse_repo_spec, resolve_repo};
+use crate::core::registries::{
     detect_input_type, parse_package_spec, resolve_package, PackageSpec, Registry,
 };
-use crate::lib::version::detect_installed_version;
+use crate::core::version::detect_installed_version;
 
 fn log(verbose: bool, msg: &str) {
     if verbose {
         eprintln!("{msg}");
     }
-}
-
-fn registry_label(r: Registry) -> &'static str {
-    r.label()
 }
 
 fn handle_package(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -55,7 +51,7 @@ fn handle_package(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn st
 
     log(
         verbose,
-        &format!("Fetching {name} from {}...", registry_label(registry)),
+        &format!("Fetching {name} from {}...", registry.label()),
     );
 
     let pkg_spec = PackageSpec {

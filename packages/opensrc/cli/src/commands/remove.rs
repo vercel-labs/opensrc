@@ -1,8 +1,8 @@
-use crate::lib::cache::{
+use crate::core::cache::{
     get_package_info, list_sources, remove_package_source, remove_repo_source, write_sources,
 };
-use crate::lib::registries::repo::is_repo_spec;
-use crate::lib::registries::{detect_registry, Registry};
+use crate::core::registries::repo::is_repo_spec;
+use crate::core::registries::{detect_registry, Registry};
 
 pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut removed = 0u32;

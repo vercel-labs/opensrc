@@ -1,10 +1,10 @@
 use std::fs;
 
-use crate::lib::cache::{
+use crate::core::cache::{
     cleanup_empty_dirs, extract_repo_base_path, get_opensrc_dir, get_repos_dir, list_sources,
     write_sources, PackageEntry, RepoEntry,
 };
-use crate::lib::registries::Registry;
+use crate::core::registries::Registry;
 
 pub fn run(
     clean_packages_flag: bool,

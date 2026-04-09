@@ -1,7 +1,5 @@
-#![allow(special_module_name)]
-
 mod commands;
-mod lib;
+mod core;
 
 use clap::{Parser, Subcommand};
 
@@ -83,11 +81,11 @@ fn main() {
             crates,
         }) => {
             let registry = if npm {
-                Some(lib::registries::Registry::Npm)
+                Some(core::registries::Registry::Npm)
             } else if pypi {
-                Some(lib::registries::Registry::PyPI)
+                Some(core::registries::Registry::PyPI)
             } else if crates {
-                Some(lib::registries::Registry::Crates)
+                Some(core::registries::Registry::Crates)
             } else {
                 None
             };

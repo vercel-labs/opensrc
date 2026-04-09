@@ -68,6 +68,10 @@ fn version_from_yarn_lock(package_name: &str, cwd: &Path) -> Option<String> {
     Some(caps[1].to_string())
 }
 
+/// Best-guess fallback: strips range prefixes (^, ~, >=) from package.json
+/// dependency specs. The result may not match an actual published version
+/// (e.g. ^1.0.0 → 1.0.0 when 1.5.3 is installed), but higher-priority
+/// sources (node_modules, lockfiles) are checked first.
 fn version_from_package_json(package_name: &str, cwd: &Path) -> Option<String> {
     let path = cwd.join("package.json");
     let content = fs::read_to_string(path).ok()?;

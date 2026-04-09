@@ -25,8 +25,3 @@ opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
-
-[profile.ci]
-inherits = "release"
-lto = "thin"
-codegen-units = 16

@@ -29,7 +29,7 @@ const binaryName = `opensrc-${platformKey}${ext}`;
 const binaryPath = join(binDir, binaryName);
 
 const packageJson = JSON.parse(
-  (await import('fs')).readFileSync(join(projectRoot, 'package.json'), 'utf8')
+  readFileSync(join(projectRoot, 'package.json'), 'utf8')
 );
 const version = packageJson.version;
 
@@ -41,16 +41,22 @@ async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest);
 
+    function cleanup(err) {
+      file.close();
+      try { unlinkSync(dest); } catch {}
+      reject(err);
+    }
+
     const request = (url, redirectCount = 0) => {
       if (redirectCount > 5) {
-        reject(new Error('Too many redirects'));
+        cleanup(new Error('Too many redirects'));
         return;
       }
       get(url, (response) => {
         if (response.statusCode === 301 || response.statusCode === 302) {
           const location = response.headers.location;
           if (!location) {
-            reject(new Error('Redirect with no Location header'));
+            cleanup(new Error('Redirect with no Location header'));
             return;
           }
           const resolved = new URL(location, url).href;
@@ -59,7 +65,7 @@ async function downloadFile(url, dest) {
         }
 
         if (response.statusCode !== 200) {
-          reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+          cleanup(new Error(`Failed to download: HTTP ${response.statusCode}`));
           return;
         }
 
@@ -68,10 +74,7 @@ async function downloadFile(url, dest) {
           file.close();
           resolve();
         });
-      }).on('error', (err) => {
-        unlinkSync(dest);
-        reject(err);
-      });
+      }).on('error', cleanup);
     };
 
     request(url);
@@ -190,6 +193,9 @@ async function fixGlobalInstallBin() {
   }
 }
 
+// Replaces npm's JS-wrapper symlink with a direct link to the native binary
+// for zero-overhead startup. If npm later reinstalls, it will recreate its own
+// symlink pointing at bin/opensrc.js, which still works (just slower).
 async function fixUnixSymlink() {
   let npmBinDir;
   try {

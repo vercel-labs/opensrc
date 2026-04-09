@@ -1,5 +1,5 @@
-use crate::lib::cache::{get_absolute_path, list_sources};
-use crate::lib::registries::Registry;
+use crate::core::cache::{get_absolute_path, list_sources};
+use crate::core::registries::Registry;
 
 pub fn run(json: bool) -> Result<(), Box<dyn std::error::Error>> {
     let (packages, repos) = list_sources();
@@ -17,7 +17,7 @@ pub fn run(json: bool) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if json {
-        let index = crate::lib::cache::read_sources();
+        let index = crate::core::cache::read_sources();
         println!("{}", serde_json::to_string_pretty(&index)?);
         return Ok(());
     }

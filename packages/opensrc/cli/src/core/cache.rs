@@ -124,6 +124,8 @@ pub fn list_sources() -> (Vec<PackageEntry>, Vec<RepoEntry>) {
     )
 }
 
+/// Atomic write: serializes to a temp file then renames, so concurrent
+/// readers never see a partially-written sources.json.
 pub fn write_sources(packages: Vec<PackageEntry>, repos: Vec<RepoEntry>) -> std::io::Result<()> {
     let dir = get_opensrc_dir();
     let path = dir.join(SOURCES_FILE);
@@ -148,7 +150,9 @@ pub fn write_sources(packages: Vec<PackageEntry>, repos: Vec<RepoEntry>) -> std:
     };
 
     let json = serde_json::to_string_pretty(&index)?;
-    fs::write(&path, json)?;
+    let tmp = dir.join(".sources.json.tmp");
+    fs::write(&tmp, json)?;
+    fs::rename(&tmp, &path)?;
     Ok(())
 }
 
