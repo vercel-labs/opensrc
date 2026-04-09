@@ -135,15 +135,11 @@ pub(crate) fn http_client() -> reqwest::blocking::Client {
 }
 
 pub(crate) fn github_token() -> Option<String> {
-    std::env::var("GITHUB_TOKEN")
-        .ok()
-        .filter(|t| !t.is_empty())
+    std::env::var("GITHUB_TOKEN").ok().filter(|t| !t.is_empty())
 }
 
 pub(crate) fn gitlab_token() -> Option<String> {
-    std::env::var("GITLAB_TOKEN")
-        .ok()
-        .filter(|t| !t.is_empty())
+    std::env::var("GITLAB_TOKEN").ok().filter(|t| !t.is_empty())
 }
 
 /// Rewrites an HTTPS clone URL to embed auth credentials when a token is available.
