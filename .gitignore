@@ -1,4 +1,4 @@
 # opensrc - source code for packages
-opensrc/
+/opensrc/
 dist/
 node_modules/
