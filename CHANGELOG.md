@@ -1,8 +1,19 @@
 # opensrc
 
-## 0.7.0
+## 0.7.1
 
 <!-- release:start -->
+### New Features
+
+- **Private repo support** — Authenticate with GitHub and GitLab private repos via `GITHUB_TOKEN` and `GITLAB_TOKEN` environment variables (#38)
+
+### Bug Fixes
+
+- **`remove` command** — Accept the same repo formats as `fetch` (e.g. `github:owner/repo`, full URLs) instead of only `owner/repo` (#39)
+<!-- release:end -->
+
+## 0.7.0
+
 ### New Features
 
 - **Rust rewrite** — Replace the TypeScript CLI with a native Rust binary for ~10x faster startup
@@ -20,7 +31,6 @@
 ### Contributors
 
 - @ctate
-<!-- release:end -->
 
 ## 0.6.0
 
