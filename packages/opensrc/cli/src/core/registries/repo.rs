@@ -182,20 +182,30 @@ fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
     let url = format!("https://api.github.com/repos/{}/{}", spec.owner, spec.repo);
 
     let client = super::http_client();
-    let resp = client
+    let mut req = client
         .get(&url)
-        .header("Accept", "application/vnd.github.v3+json")
-        .send()?;
+        .header("Accept", "application/vnd.github.v3+json");
+
+    if let Some(token) = super::github_token() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+
+    let resp = req.send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        let hint = if super::github_token().is_none() {
+            " If this is a private repo, set GITHUB_TOKEN."
+        } else {
+            " Your token may lack access to this repository."
+        };
         return Err(format!(
-            "Repository \"{}/{}\" not found on GitHub. Make sure it exists and is public.",
+            "Repository \"{}/{}\" not found on GitHub.{hint}",
             spec.owner, spec.repo
         )
         .into());
     }
     if resp.status() == reqwest::StatusCode::FORBIDDEN {
-        return Err("GitHub API rate limit exceeded. Try again later or authenticate.".into());
+        return Err("GitHub API rate limit exceeded. Try again later or set GITHUB_TOKEN.".into());
     }
     if !resp.status().is_success() {
         return Err(format!("Failed to fetch repository info: {}", resp.status()).into());
@@ -217,11 +227,22 @@ fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
     let url = format!("https://gitlab.com/api/v4/projects/{encoded}");
 
     let client = super::http_client();
-    let resp = client.get(&url).send()?;
+    let mut req = client.get(&url);
+
+    if let Some(token) = super::gitlab_token() {
+        req = req.header("PRIVATE-TOKEN", &token);
+    }
+
+    let resp = req.send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        let hint = if super::gitlab_token().is_none() {
+            " If this is a private repo, set GITLAB_TOKEN."
+        } else {
+            " Your token may lack access to this repository."
+        };
         return Err(format!(
-            "Repository \"{}/{}\" not found on GitLab. Make sure it exists and is public.",
+            "Repository \"{}/{}\" not found on GitLab.{hint}",
             spec.owner, spec.repo
         )
         .into());

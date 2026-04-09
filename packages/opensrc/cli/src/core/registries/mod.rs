@@ -134,6 +134,41 @@ pub(crate) fn http_client() -> reqwest::blocking::Client {
         .expect("failed to build HTTP client")
 }
 
+pub(crate) fn github_token() -> Option<String> {
+    std::env::var("GITHUB_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+}
+
+pub(crate) fn gitlab_token() -> Option<String> {
+    std::env::var("GITLAB_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+}
+
+/// Rewrites an HTTPS clone URL to embed auth credentials when a token is available.
+pub fn authenticated_clone_url(url: &str) -> String {
+    if let Some(token) = github_token() {
+        if url.contains("github.com") {
+            return url.replacen(
+                "https://github.com",
+                &format!("https://x-access-token:{token}@github.com"),
+                1,
+            );
+        }
+    }
+    if let Some(token) = gitlab_token() {
+        if url.contains("gitlab.com") {
+            return url.replacen(
+                "https://gitlab.com",
+                &format!("https://oauth2:{token}@gitlab.com"),
+                1,
+            );
+        }
+    }
+    url.to_string()
+}
+
 pub fn detect_input_type(spec: &str) -> &'static str {
     let trimmed = spec.trim();
     let lower = trimmed.to_lowercase();

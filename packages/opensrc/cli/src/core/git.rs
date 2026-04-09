@@ -4,7 +4,7 @@ use std::process::Command;
 
 use super::cache::{get_repo_display_name, get_repo_path, get_repo_relative_path};
 use super::registries::repo::ResolvedRepo;
-use super::registries::{Registry, ResolvedPackage};
+use super::registries::{authenticated_clone_url, Registry, ResolvedPackage};
 
 #[derive(Debug)]
 pub struct FetchResult {
@@ -190,7 +190,8 @@ pub fn fetch_source(resolved: &ResolvedPackage) -> FetchResult {
         let _ = fs::create_dir_all(parent);
     }
 
-    let clone = clone_at_tag(&resolved.repo_url, &repo_path, &resolved.version);
+    let clone_url = authenticated_clone_url(&resolved.repo_url);
+    let clone = clone_at_tag(&clone_url, &repo_path, &resolved.version);
 
     if !clone.success {
         return FetchResult {
@@ -238,7 +239,8 @@ pub fn fetch_repo_source(resolved: &ResolvedRepo) -> FetchResult {
         let _ = fs::create_dir_all(parent);
     }
 
-    let clone = clone_at_ref(&resolved.repo_url, &repo_path, &resolved.git_ref);
+    let clone_url = authenticated_clone_url(&resolved.repo_url);
+    let clone = clone_at_ref(&clone_url, &repo_path, &resolved.git_ref);
 
     if !clone.success {
         return FetchResult {
