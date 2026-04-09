@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  version-sync:
+    name: Version Sync Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check version sync
+        run: node packages/opensrc/scripts/check-version-sync.js
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/opensrc/cli
+
+      - name: Format check
+        run: cargo fmt --manifest-path packages/opensrc/cli/Cargo.toml -- --check
+
+      - name: Clippy check
+        run: cargo clippy --manifest-path packages/opensrc/cli/Cargo.toml -- -D warnings
+
+      - name: Run tests
+        run: cargo test --manifest-path packages/opensrc/cli/Cargo.toml

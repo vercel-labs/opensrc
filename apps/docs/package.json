@@ -1,0 +1,43 @@
+{
+  "name": "@opensrc/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "portless run --name opensrc next dev",
+    "build": "next build",
+    "start": "next start",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^3",
+    "@mdx-js/loader": "^3",
+    "@mdx-js/react": "^3",
+    "@next/mdx": "^15",
+    "@upstash/ratelimit": "^2",
+    "@upstash/redis": "^1",
+    "ai": "^6",
+    "bash-tool": "^1",
+    "clsx": "^2",
+    "geist": "^1",
+    "just-bash": "^2",
+    "next": "^15",
+    "next-themes": "^0.4",
+    "radix-ui": "^1",
+    "react": "^19",
+    "react-dom": "^19",
+    "shiki": "^3",
+    "streamdown": "^2",
+    "tailwind-merge": "^3",
+    "tailwindcss-animate": "^1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/mdx": "^2",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,60 @@
+# Commands
+
+## fetch (default)
+
+Fetch and cache source code for a package or repository. This is the default command — no subcommand needed:
+
+```bash
+opensrc zod
+opensrc pypi:requests
+opensrc vercel/ai
+```
+
+## path
+
+Print the absolute path to cached source code. Fetches automatically if not already cached. Useful for piping into other tools:
+
+```bash
+opensrc path zod
+opensrc path --verbose zod
+```
+
+## list
+
+List all cached packages and repositories:
+
+```bash
+opensrc list
+opensrc list --json
+```
+
+## remove
+
+Remove a specific package or repository from the cache:
+
+```bash
+opensrc remove zod
+opensrc remove pypi:requests
+opensrc remove vercel/ai
+```
+
+## clean
+
+Clean the entire cache, or filter by type:
+
+```bash
+opensrc clean
+opensrc clean --packages
+opensrc clean --repos
+opensrc clean --npm
+opensrc clean --pypi
+opensrc clean --crates
+```
+
+| Flag | Description |
+|------|-------------|
+| `--packages` | Only clean packages (not repos) |
+| `--repos` | Only clean repositories |
+| `--npm` | Only clean npm packages |
+| `--pypi` | Only clean PyPI packages |
+| `--crates` | Only clean crates.io packages |

@@ -1,4 +1,24 @@
-# opensrc - source code for packages
+# Rust build artifacts
+/packages/opensrc/cli/target/
+
+# Native binaries (built by CI or locally)
+packages/opensrc/bin/opensrc-*
+
+# Node
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Next.js
+.next/
+next-env.d.ts
+
+# Turbo
+.turbo/
+
+# Legacy
 /opensrc/
 dist/
-node_modules/

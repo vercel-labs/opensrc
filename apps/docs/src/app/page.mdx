@@ -1,0 +1,48 @@
+# Getting Started
+
+opensrc fetches source code for packages to give coding agents deeper context. Instead of relying only on types and interfaces, agents can read the actual implementation.
+
+## Install
+
+**Global (recommended):**
+
+```bash
+npm install -g opensrc
+```
+
+**Or run directly with npx:**
+
+```bash
+npx opensrc zod
+```
+
+## Usage
+
+Fetch source code for any npm package:
+
+```bash
+opensrc zod
+```
+
+Python packages from PyPI:
+
+```bash
+opensrc pypi:requests
+```
+
+Rust crates from crates.io:
+
+```bash
+opensrc crates:serde
+```
+
+GitHub repositories:
+
+```bash
+opensrc vercel/ai
+```
+
+## Requirements
+
+- Node.js 18+
+- Git (for cloning repositories)

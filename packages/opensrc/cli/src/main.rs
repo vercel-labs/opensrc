@@ -1,0 +1,119 @@
+#![allow(special_module_name)]
+
+mod commands;
+mod lib;
+
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "opensrc")]
+#[command(about = "Fetch source code for packages to give coding agents deeper context")]
+#[command(version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    /// Packages or repos to fetch (e.g., zod, pypi:requests, owner/repo)
+    #[arg(trailing_var_arg = true)]
+    packages: Vec<String>,
+
+    /// Working directory for lockfile version resolution
+    #[arg(long)]
+    cwd: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Print the absolute path to cached source (fetches on cache miss)
+    Path {
+        /// Package or repo spec
+        package: String,
+        /// Working directory for lockfile version resolution
+        #[arg(long)]
+        cwd: Option<String>,
+        /// Show progress during fetch
+        #[arg(long)]
+        verbose: bool,
+    },
+    /// List all globally cached sources
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove cached source code for packages or repos
+    #[command(alias = "rm")]
+    Remove {
+        /// Packages or repos to remove
+        #[arg(required = true)]
+        packages: Vec<String>,
+    },
+    /// Remove all cached packages and/or repos
+    Clean {
+        /// Only remove packages (all registries)
+        #[arg(long)]
+        packages: bool,
+        /// Only remove repos
+        #[arg(long)]
+        repos: bool,
+        /// Only remove npm packages
+        #[arg(long)]
+        npm: bool,
+        /// Only remove PyPI packages
+        #[arg(long)]
+        pypi: bool,
+        /// Only remove crates.io packages
+        #[arg(long)]
+        crates: bool,
+    },
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    let result = match cli.command {
+        Some(Commands::Path {
+            package,
+            cwd,
+            verbose,
+        }) => commands::path::run(&package, cwd.as_deref(), verbose),
+
+        Some(Commands::List { json }) => commands::list::run(json),
+
+        Some(Commands::Remove { packages }) => commands::remove::run(&packages),
+
+        Some(Commands::Clean {
+            packages,
+            repos,
+            npm,
+            pypi,
+            crates,
+        }) => {
+            let registry = if npm {
+                Some(lib::registries::Registry::Npm)
+            } else if pypi {
+                Some(lib::registries::Registry::PyPI)
+            } else if crates {
+                Some(lib::registries::Registry::Crates)
+            } else {
+                None
+            };
+
+            commands::clean::run(packages || registry.is_some(), repos, registry)
+        }
+
+        None => {
+            if cli.packages.is_empty() {
+                Cli::parse_from(["opensrc", "--help"]);
+                Ok(())
+            } else {
+                commands::fetch::run(&cli.packages, cli.cwd.as_deref())
+            }
+        }
+    };
+
+    if let Err(e) = result {
+        eprintln!("Error: {e}");
+        std::process::exit(1);
+    }
+}

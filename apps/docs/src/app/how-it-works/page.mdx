@@ -1,0 +1,88 @@
+# How It Works
+
+## Overview
+
+opensrc resolves packages from their registry, clones the source repository at the correct version tag, and caches it locally. AI coding agents can then read the full implementation — not just type definitions — for deeper understanding.
+
+```
+Agent asks about zod → opensrc resolves npm registry
+→ finds GitHub repo + version tag → git clone --depth 1
+→ cached at ~/.opensrc/packages/zod/
+```
+
+## Resolution
+
+When you run `opensrc zod`, the following happens:
+
+1. **Registry lookup** — queries the npm registry for the `zod` package metadata
+2. **Repository detection** — extracts the `repository` field from `package.json` to find the source repo URL
+3. **Version tagging** — maps the installed or latest version to a git tag (e.g. `v3.24.1`)
+4. **Shallow clone** — runs `git clone --depth 1 --branch v3.24.1` for a fast, minimal checkout
+5. **Cache storage** — stores the result in `~/.opensrc/packages/zod/`
+
+## Version Detection
+
+opensrc tries to detect the version you're actually using in your project. It checks (in order):
+
+1. `node_modules/<package>/package.json`
+2. `package-lock.json`
+3. `pnpm-lock.yaml`
+4. `yarn.lock`
+5. Falls back to the `latest` tag from the registry
+
+This means the cached source matches the version in your project, not just the latest release.
+
+## Cache Directory
+
+All source code is cached in `~/.opensrc/`:
+
+```
+~/.opensrc/
+├── packages/        # Registry packages (npm, pypi, crates)
+│   ├── zod/
+│   ├── pypi--requests/
+│   └── crates--serde/
+├── repos/           # Direct repository clones
+│   └── github.com/
+│       └── vercel/
+│           └── ai/
+└── sources.json     # Metadata for all cached sources
+```
+
+## Metadata
+
+`sources.json` tracks metadata for all cached sources:
+
+```json
+{
+  "packages": {
+    "zod": {
+      "version": "3.24.1",
+      "registry": "npm",
+      "fetched_at": "2025-01-15T10:30:00Z"
+    }
+  },
+  "repos": {
+    "github.com/vercel/ai": {
+      "ref": "main",
+      "fetched_at": "2025-01-15T10:30:00Z"
+    }
+  }
+}
+```
+
+## AGENTS.md Integration
+
+opensrc is designed to be referenced in your `AGENTS.md` file so AI coding agents know how to fetch source code:
+
+```markdown
+## Source Code Reference
+
+Source code for dependencies is available in `opensrc/`.
+
+To fetch source code for a package:
+
+\`\`\`bash
+npx opensrc <package>
+\`\`\`
+```

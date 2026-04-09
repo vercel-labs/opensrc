@@ -1,0 +1,288 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  check-release:
+    name: Check for new version
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      needs_github_release: ${{ steps.check.outputs.needs_github_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compare package.json version to npm and check GitHub release
+        id: check
+        run: |
+          LOCAL_VERSION=$(node -p "require('./packages/opensrc/package.json').version")
+          echo "Local version: $LOCAL_VERSION"
+
+          NPM_VERSION=$(npm view opensrc version 2>/dev/null || echo "0.0.0")
+          echo "npm version: $NPM_VERSION"
+
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "Version changed: $NPM_VERSION -> $LOCAL_VERSION"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version unchanged on npm, skipping build and publish"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+
+            TAG="v$LOCAL_VERSION"
+            if gh release view "$TAG" &>/dev/null; then
+              echo "GitHub release $TAG exists"
+              echo "needs_github_release=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "GitHub release $TAG is missing, will rebuild and create it"
+              echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-binaries:
+    name: Build ${{ matrix.name }}
+    needs: check-release
+    if: needs.check-release.outputs.should_release == 'true' || needs.check-release.outputs.needs_github_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: opensrc-linux-x64
+            use_zigbuild: true
+          - name: Linux ARM64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: opensrc-linux-arm64
+            use_zigbuild: true
+          - name: Linux musl x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: opensrc-linux-musl-x64
+            use_zigbuild: true
+          - name: Linux musl ARM64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            binary: opensrc-linux-musl-arm64
+            use_zigbuild: true
+          - name: Windows x64
+            os: ubuntu-latest
+            target: x86_64-pc-windows-gnu
+            binary: opensrc-win32-x64.exe
+            use_zigbuild: false
+          - name: macOS x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            binary: opensrc-darwin-x64
+            use_zigbuild: false
+          - name: macOS ARM64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            binary: opensrc-darwin-arm64
+            use_zigbuild: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Sync version
+        run: node packages/opensrc/scripts/sync-version.js
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu mingw-w64
+
+      - name: Install cargo-zigbuild
+        if: matrix.use_zigbuild
+        run: |
+          pip3 install ziglang
+          cargo install cargo-zigbuild
+
+      - name: Configure Rust linkers
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << 'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+
+          [target.x86_64-pc-windows-gnu]
+          linker = "x86_64-w64-mingw32-gcc"
+          EOF
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/opensrc/cli
+
+      - name: Build with zigbuild
+        if: matrix.use_zigbuild
+        run: cargo zigbuild --release --manifest-path packages/opensrc/cli/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Build with cargo
+        if: '!matrix.use_zigbuild'
+        run: cargo build --release --manifest-path packages/opensrc/cli/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Copy binary
+        run: |
+          mkdir -p artifacts
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            cp packages/opensrc/cli/target/${{ matrix.target }}/release/opensrc.exe artifacts/${{ matrix.binary }}
+          else
+            cp packages/opensrc/cli/target/${{ matrix.target }}/release/opensrc artifacts/${{ matrix.binary }}
+            chmod +x artifacts/${{ matrix.binary }}
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: artifacts/${{ matrix.binary }}
+          retention-days: 7
+
+  publish:
+    name: Publish to npm
+    needs: [check-release, build-binaries]
+    if: needs.check-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Move binaries to bin directory
+        run: |
+          mkdir -p packages/opensrc/bin
+          find artifacts -type f -name 'opensrc-*' -exec mv {} packages/opensrc/bin/ \;
+          rm -rf artifacts
+          chmod +x packages/opensrc/bin/opensrc-* 2>/dev/null || true
+          echo "Binaries in packages/opensrc/bin/:"
+          ls -la packages/opensrc/bin/
+
+      - name: Verify all binaries exist
+        run: |
+          EXPECTED_BINARIES=(
+            "opensrc-linux-x64"
+            "opensrc-linux-arm64"
+            "opensrc-linux-musl-x64"
+            "opensrc-linux-musl-arm64"
+            "opensrc-win32-x64.exe"
+            "opensrc-darwin-x64"
+            "opensrc-darwin-arm64"
+          )
+          MIN_SIZE=100000
+          ERRORS=0
+          for binary in "${EXPECTED_BINARIES[@]}"; do
+            if [ ! -f "packages/opensrc/bin/$binary" ]; then
+              echo "ERROR: Missing packages/opensrc/bin/$binary"
+              ERRORS=$((ERRORS + 1))
+            else
+              SIZE=$(stat -c%s "packages/opensrc/bin/$binary" 2>/dev/null || stat -f%z "packages/opensrc/bin/$binary")
+              if [ "$SIZE" -lt "$MIN_SIZE" ]; then
+                echo "ERROR: packages/opensrc/bin/$binary is too small ($SIZE bytes, expected >= $MIN_SIZE)"
+                ERRORS=$((ERRORS + 1))
+              else
+                echo "OK: packages/opensrc/bin/$binary ($SIZE bytes)"
+              fi
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "Error: $ERRORS binary issues found"
+            exit 1
+          fi
+          echo "All 7 platform binaries present and valid"
+
+      - name: Publish to npm
+        run: npm publish --no-git-checks
+        working-directory: packages/opensrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_VERCEL_TOKEN_ELEVATED }}
+
+  github-release:
+    name: Create GitHub Release
+    needs: [check-release, build-binaries, publish]
+    if: always() && needs.build-binaries.result == 'success' && needs.check-release.outputs.needs_github_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Move binaries to bin directory
+        run: |
+          mkdir -p bin
+          find artifacts -type f -name 'opensrc-*' -exec mv {} bin/ \;
+          rm -rf artifacts
+          chmod +x bin/opensrc-* 2>/dev/null || true
+          ls -la bin/
+
+      - name: Verify binaries exist
+        run: |
+          BINARY_COUNT=$(ls bin/opensrc-* 2>/dev/null | wc -l)
+          if [ "$BINARY_COUNT" -lt 7 ]; then
+            echo "Error: Expected 7 binaries, found $BINARY_COUNT"
+            ls -la bin/
+            exit 1
+          fi
+          echo "Found $BINARY_COUNT binaries"
+
+      - name: Create GitHub Release
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          TAG="v$VERSION"
+
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists, uploading assets..."
+            gh release upload "$TAG" bin/opensrc-* --clobber
+          else
+            echo "Creating release $TAG..."
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --generate-notes \
+              bin/opensrc-*
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

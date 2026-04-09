@@ -1,0 +1,70 @@
+# Registries
+
+opensrc resolves packages from multiple registries. The registry is detected automatically from the input format.
+
+## npm
+
+The default registry. Pass a package name directly:
+
+```bash
+opensrc zod
+opensrc @vercel/ai
+opensrc next
+```
+
+## PyPI
+
+Use the `pypi:` prefix for Python packages:
+
+```bash
+opensrc pypi:requests
+opensrc pypi:flask
+opensrc pypi:pydantic
+```
+
+## crates.io
+
+Use the `crates:` prefix for Rust crates:
+
+```bash
+opensrc crates:serde
+opensrc crates:tokio
+opensrc crates:clap
+```
+
+## GitHub
+
+Pass `owner/repo` to fetch from GitHub directly:
+
+```bash
+opensrc vercel/ai
+opensrc facebook/react
+opensrc tokio-rs/tokio
+```
+
+## GitLab
+
+Use the `gitlab:` prefix:
+
+```bash
+opensrc gitlab:owner/repo
+```
+
+## Bitbucket
+
+Use the `bitbucket:` prefix:
+
+```bash
+opensrc bitbucket:owner/repo
+```
+
+## Summary
+
+| Registry | Prefix | Example |
+|----------|--------|---------|
+| npm | _(none)_ | `opensrc zod` |
+| PyPI | `pypi:` | `opensrc pypi:requests` |
+| crates.io | `crates:` | `opensrc crates:serde` |
+| GitHub | `owner/repo` | `opensrc vercel/ai` |
+| GitLab | `gitlab:` | `opensrc gitlab:owner/repo` |
+| Bitbucket | `bitbucket:` | `opensrc bitbucket:owner/repo` |

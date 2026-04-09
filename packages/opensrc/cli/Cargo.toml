@@ -1,0 +1,32 @@
+[package]
+name = "opensrc"
+version = "0.6.0"
+edition = "2021"
+description = "Fetch source code for packages to give coding agents deeper context"
+license = "Apache-2.0"
+repository = "https://github.com/vercel-labs/opensrc"
+readme = "../README.md"
+keywords = ["cli", "source-code", "ai", "coding-agents"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+url = "2"
+urlencoding = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.ci]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
