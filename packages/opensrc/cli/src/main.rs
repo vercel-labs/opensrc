@@ -56,6 +56,9 @@ enum Commands {
         /// Only remove crates.io packages
         #[arg(long)]
         crates: bool,
+        /// Only remove RubyGems packages
+        #[arg(long)]
+        rubygems: bool,
     },
 }
 
@@ -79,6 +82,7 @@ fn main() {
             npm,
             pypi,
             crates,
+            rubygems,
         }) => {
             let registry = if npm {
                 Some(core::registries::Registry::Npm)
@@ -86,6 +90,8 @@ fn main() {
                 Some(core::registries::Registry::PyPI)
             } else if crates {
                 Some(core::registries::Registry::Crates)
+            } else if rubygems {
+                Some(core::registries::Registry::RubyGems)
             } else {
                 None
             };
