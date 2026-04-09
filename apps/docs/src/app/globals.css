@@ -51,11 +51,9 @@ html {
   color: #fff;
 }
 
-@media (prefers-color-scheme: dark) {
-  ::selection {
-    background-color: #fff;
-    color: #000;
-  }
+.dark ::selection {
+  background-color: #fff;
+  color: #000;
 }
 
 @keyframes tool-shimmer {

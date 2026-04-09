@@ -89,7 +89,20 @@ pub fn read_sources() -> SourcesIndex {
         return SourcesIndex::default();
     }
     match fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(index) => index,
+            Err(e) => {
+                let bak = path.with_extension("json.bak");
+                eprintln!(
+                    "Warning: {} is corrupt ({}), backing up to {}",
+                    path.display(),
+                    e,
+                    bak.display()
+                );
+                let _ = fs::copy(&path, &bak);
+                SourcesIndex::default()
+            }
+        },
         Err(_) => SourcesIndex::default(),
     }
 }
@@ -290,5 +303,51 @@ mod tests {
             "repos/github.com/owner/repo"
         );
         assert_eq!(extract_repo_base_path("other"), "other");
+    }
+
+    #[test]
+    fn test_read_sources_corrupt_json_creates_backup() {
+        let tmp = std::env::temp_dir().join("opensrc_test_corrupt");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let sources_path = tmp.join(SOURCES_FILE);
+        let backup_path = tmp.join("sources.json.bak");
+        fs::write(&sources_path, "NOT VALID JSON {{{").unwrap();
+
+        std::env::set_var("OPENSRC_HOME", tmp.to_str().unwrap());
+        let index = read_sources();
+        std::env::remove_var("OPENSRC_HOME");
+
+        assert!(index.packages.is_none());
+        assert!(index.repos.is_none());
+        assert!(backup_path.exists(), "backup file should be created");
+        let bak_content = fs::read_to_string(&backup_path).unwrap();
+        assert_eq!(bak_content, "NOT VALID JSON {{{");
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_read_sources_valid_json() {
+        let tmp = std::env::temp_dir().join("opensrc_test_valid");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let sources_path = tmp.join(SOURCES_FILE);
+        fs::write(
+            &sources_path,
+            r#"{"updatedAt":"2024-01-01T00:00:00Z","packages":[{"name":"zod","version":"3.22.0","registry":"npm","path":"repos/github.com/colinhacks/zod/v3.22.0","fetchedAt":"2024-01-01T00:00:00Z"}]}"#,
+        )
+        .unwrap();
+
+        std::env::set_var("OPENSRC_HOME", tmp.to_str().unwrap());
+        let index = read_sources();
+        std::env::remove_var("OPENSRC_HOME");
+
+        assert!(index.packages.is_some());
+        assert_eq!(index.packages.unwrap().len(), 1);
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

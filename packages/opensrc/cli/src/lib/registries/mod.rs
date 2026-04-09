@@ -109,6 +109,22 @@ pub fn resolve_package(spec: &PackageSpec) -> Result<ResolvedPackage, Box<dyn st
     }
 }
 
+pub(crate) fn is_git_repo_url(url: &str) -> bool {
+    url.contains("github.com") || url.contains("gitlab.com") || url.contains("bitbucket.org")
+}
+
+pub(crate) fn normalize_repo_url(url: &str) -> String {
+    url.trim_end_matches('/')
+        .trim_end_matches(".git")
+        .split("/tree/")
+        .next()
+        .unwrap_or(url)
+        .split("/blob/")
+        .next()
+        .unwrap_or(url)
+        .to_string()
+}
+
 pub fn detect_input_type(spec: &str) -> &'static str {
     let trimmed = spec.trim();
     let lower = trimmed.to_lowercase();
@@ -124,4 +140,69 @@ pub fn detect_input_type(spec: &str) -> &'static str {
     }
 
     "package"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_git_repo_url_github() {
+        assert!(is_git_repo_url("https://github.com/owner/repo"));
+    }
+
+    #[test]
+    fn test_is_git_repo_url_gitlab() {
+        assert!(is_git_repo_url("https://gitlab.com/owner/repo"));
+    }
+
+    #[test]
+    fn test_is_git_repo_url_bitbucket() {
+        assert!(is_git_repo_url("https://bitbucket.org/owner/repo"));
+    }
+
+    #[test]
+    fn test_is_git_repo_url_other() {
+        assert!(!is_git_repo_url("https://example.com/owner/repo"));
+    }
+
+    #[test]
+    fn test_normalize_repo_url_trailing_slash() {
+        assert_eq!(
+            normalize_repo_url("https://github.com/owner/repo/"),
+            "https://github.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_normalize_repo_url_dot_git() {
+        assert_eq!(
+            normalize_repo_url("https://github.com/owner/repo.git"),
+            "https://github.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_normalize_repo_url_tree_ref() {
+        assert_eq!(
+            normalize_repo_url("https://github.com/owner/repo/tree/main/src"),
+            "https://github.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_normalize_repo_url_blob_ref() {
+        assert_eq!(
+            normalize_repo_url("https://github.com/owner/repo/blob/main/file.rs"),
+            "https://github.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_normalize_repo_url_clean() {
+        assert_eq!(
+            normalize_repo_url("https://github.com/owner/repo"),
+            "https://github.com/owner/repo"
+        );
+    }
 }

@@ -69,8 +69,7 @@ fn handle_package(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn st
     let result = fetch_source(&resolved);
 
     if !result.success {
-        eprintln!("Failed: {}", result.error.as_deref().unwrap_or("unknown"));
-        std::process::exit(1);
+        return Err(format!("Failed: {}", result.error.as_deref().unwrap_or("unknown")).into());
     }
 
     if let Some(ref warn) = result.error {
@@ -106,8 +105,7 @@ fn handle_repo(spec: &str, _cwd: &str, verbose: bool) -> Result<(), Box<dyn std:
     let repo_spec = match parse_repo_spec(spec) {
         Some(s) => s,
         None => {
-            eprintln!("Invalid repository format: {spec}");
-            std::process::exit(1);
+            return Err(format!("Invalid repository format: {spec}").into());
         }
     };
 
@@ -134,8 +132,7 @@ fn handle_repo(spec: &str, _cwd: &str, verbose: bool) -> Result<(), Box<dyn std:
     let result = fetch_repo_source(&resolved);
 
     if !result.success {
-        eprintln!("Failed: {}", result.error.as_deref().unwrap_or("unknown"));
-        std::process::exit(1);
+        return Err(format!("Failed: {}", result.error.as_deref().unwrap_or("unknown")).into());
     }
 
     if let Some(ref warn) = result.error {

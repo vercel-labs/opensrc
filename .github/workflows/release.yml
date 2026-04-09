@@ -8,13 +8,13 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
-permissions:
-  contents: write
-
 jobs:
   check-release:
     name: Check for new version
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       needs_github_release: ${{ steps.check.outputs.needs_github_release }}
@@ -58,6 +58,9 @@ jobs:
     needs: check-release
     if: needs.check-release.outputs.should_release == 'true' || needs.check-release.outputs.needs_github_release == 'true'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -174,6 +177,9 @@ jobs:
     needs: [check-release, build-binaries]
     if: needs.check-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -240,8 +246,15 @@ jobs:
   github-release:
     name: Create GitHub Release
     needs: [check-release, build-binaries, publish]
-    if: always() && needs.build-binaries.result == 'success' && needs.check-release.outputs.needs_github_release == 'true'
+    if: >-
+      always()
+      && needs.build-binaries.result == 'success'
+      && needs.check-release.outputs.needs_github_release == 'true'
+      && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

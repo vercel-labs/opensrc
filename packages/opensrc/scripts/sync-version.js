@@ -16,14 +16,21 @@ console.log(`Syncing version ${version} to all config files...`);
 
 const cargoTomlPath = join(cliDir, 'Cargo.toml');
 let cargoToml = readFileSync(cargoTomlPath, 'utf-8');
-const cargoVersionRegex = /^version\s*=\s*"[^"]*"/m;
 const newCargoVersion = `version = "${version}"`;
 
+const packageSectionMatch = cargoToml.match(/\[package\]([\s\S]*?)(?=\n\[|$)/);
+if (!packageSectionMatch) {
+  console.error('  Could not find [package] section in cli/Cargo.toml');
+  process.exit(1);
+}
+
+const versionInSection = packageSectionMatch[1].match(/^version\s*=\s*"[^"]*"/m);
+
 let cargoTomlUpdated = false;
-if (cargoVersionRegex.test(cargoToml)) {
-  const oldMatch = cargoToml.match(cargoVersionRegex)?.[0];
+if (versionInSection) {
+  const oldMatch = versionInSection[0];
   if (oldMatch !== newCargoVersion) {
-    cargoToml = cargoToml.replace(cargoVersionRegex, newCargoVersion);
+    cargoToml = cargoToml.replace(oldMatch, newCargoVersion);
     writeFileSync(cargoTomlPath, cargoToml);
     console.log(`  Updated cli/Cargo.toml: ${oldMatch} -> ${newCargoVersion}`);
     cargoTomlUpdated = true;
@@ -31,7 +38,7 @@ if (cargoVersionRegex.test(cargoToml)) {
     console.log(`  cli/Cargo.toml already up to date`);
   }
 } else {
-  console.error('  Could not find version field in cli/Cargo.toml');
+  console.error('  Could not find version field in [package] section of cli/Cargo.toml');
   process.exit(1);
 }
 

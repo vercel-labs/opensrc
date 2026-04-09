@@ -47,9 +47,13 @@ pub fn parse_npm_spec(spec: &str) -> (String, Option<String>) {
     (spec.to_string(), None)
 }
 
+fn npm_registry_url(name: &str) -> String {
+    let encoded = urlencoding::encode(name);
+    format!("{NPM_REGISTRY}/{encoded}")
+}
+
 fn fetch_npm_info(name: &str) -> Result<NpmResponse, Box<dyn std::error::Error>> {
-    let encoded = name.replace('@', "%40").replace("%40", "@");
-    let url = format!("{NPM_REGISTRY}/{encoded}");
+    let url = npm_registry_url(name);
 
     let client = reqwest::blocking::Client::new();
     let resp = client
@@ -174,5 +178,17 @@ mod tests {
         let (name, version) = parse_npm_spec("@babel/core");
         assert_eq!(name, "@babel/core");
         assert_eq!(version, None);
+    }
+
+    #[test]
+    fn test_npm_registry_url_unscoped() {
+        let url = npm_registry_url("zod");
+        assert_eq!(url, "https://registry.npmjs.org/zod");
+    }
+
+    #[test]
+    fn test_npm_registry_url_scoped() {
+        let url = npm_registry_url("@babel/core");
+        assert_eq!(url, "https://registry.npmjs.org/%40babel%2Fcore");
     }
 }

@@ -12,10 +12,15 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 const expectedVersion = packageJson.version;
 
 const cargoToml = readFileSync(join(cliDir, 'Cargo.toml'), 'utf-8');
-const cargoMatch = cargoToml.match(/^version\s*=\s*"([^"]*)"/m);
+const packageSection = cargoToml.match(/\[package\]([\s\S]*?)(?=\n\[|$)/);
+if (!packageSection) {
+  console.error('Could not find [package] section in cli/Cargo.toml');
+  process.exit(1);
+}
+const cargoMatch = packageSection[1].match(/^version\s*=\s*"([^"]*)"/m);
 
 if (!cargoMatch) {
-  console.error('Could not find version field in cli/Cargo.toml');
+  console.error('Could not find version field in [package] section of cli/Cargo.toml');
   process.exit(1);
 }
 

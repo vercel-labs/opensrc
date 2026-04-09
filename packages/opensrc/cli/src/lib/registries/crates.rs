@@ -83,21 +83,7 @@ fn verify_crate_version(name: &str, version: &str) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn is_git_repo_url(url: &str) -> bool {
-    url.contains("github.com") || url.contains("gitlab.com") || url.contains("bitbucket.org")
-}
-
-fn normalize_repo_url(url: &str) -> String {
-    url.trim_end_matches('/')
-        .trim_end_matches(".git")
-        .split("/tree/")
-        .next()
-        .unwrap_or(url)
-        .split("/blob/")
-        .next()
-        .unwrap_or(url)
-        .to_string()
-}
+use super::{is_git_repo_url, normalize_repo_url};
 
 fn extract_repo_url(krate: &CrateInfo) -> Option<String> {
     if let Some(ref repo) = krate.repository {

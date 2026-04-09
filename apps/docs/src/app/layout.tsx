@@ -122,7 +122,7 @@ export default async function RootLayout({
 }) {
   const cookieStore = await cookies();
   const chatOpen = cookieStore.get("docs-chat-open")?.value === "true";
-  const chatWidth = Number(cookieStore.get("docs-chat-width")?.value) || 400;
+  const chatWidth = Math.min(800, Math.max(300, Number(cookieStore.get("docs-chat-width")?.value) || 400));
 
   return (
     <html lang="en" suppressHydrationWarning>

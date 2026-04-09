@@ -61,21 +61,7 @@ fn fetch_pypi_info(
     Ok(resp.json()?)
 }
 
-fn is_git_repo_url(url: &str) -> bool {
-    url.contains("github.com") || url.contains("gitlab.com") || url.contains("bitbucket.org")
-}
-
-fn normalize_repo_url(url: &str) -> String {
-    url.trim_end_matches('/')
-        .trim_end_matches(".git")
-        .split("/tree/")
-        .next()
-        .unwrap_or(url)
-        .split("/blob/")
-        .next()
-        .unwrap_or(url)
-        .to_string()
-}
+use super::{is_git_repo_url, normalize_repo_url};
 
 fn extract_repo_url(info: &PyPIInfo) -> Option<String> {
     let repo_keys = [

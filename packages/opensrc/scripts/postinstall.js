@@ -39,10 +39,20 @@ async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest);
 
-    const request = (url) => {
+    const request = (url, redirectCount = 0) => {
+      if (redirectCount > 5) {
+        reject(new Error('Too many redirects'));
+        return;
+      }
       get(url, (response) => {
         if (response.statusCode === 301 || response.statusCode === 302) {
-          request(response.headers.location);
+          const location = response.headers.location;
+          if (!location) {
+            reject(new Error('Redirect with no Location header'));
+            return;
+          }
+          const resolved = new URL(location, url).href;
+          request(resolved, redirectCount + 1);
           return;
         }
 
