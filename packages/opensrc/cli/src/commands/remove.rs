@@ -1,7 +1,7 @@
 use crate::core::cache::{
     get_package_info, list_sources, remove_package_source, remove_repo_source, write_sources,
 };
-use crate::core::registries::repo::is_repo_spec;
+use crate::core::registries::repo::{is_repo_spec, parse_repo_spec};
 use crate::core::registries::{detect_registry, Registry};
 
 pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
@@ -16,11 +16,14 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         let is_repo = is_repo_spec(item) || (item.contains('/') && !item.contains(':'));
 
         if is_repo {
-            let mut display_name = item.clone();
-            let slash_count = item.chars().filter(|c| *c == '/').count();
-            if slash_count == 1 && !item.starts_with("http") {
-                display_name = format!("github.com/{item}");
-            }
+            let display_name = match parse_repo_spec(item) {
+                Some(spec) => format!("{}/{}/{}", spec.host, spec.owner, spec.repo),
+                None => {
+                    println!("  ✗ Could not parse repo spec: {item}");
+                    had_errors = true;
+                    continue;
+                }
+            };
 
             match remove_repo_source(&display_name, None) {
                 Ok(true) => {
