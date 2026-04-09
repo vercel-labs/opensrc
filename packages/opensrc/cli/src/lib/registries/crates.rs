@@ -58,10 +58,7 @@ fn fetch_crate_info(name: &str) -> Result<CrateResponse, Box<dyn std::error::Err
     Ok(resp.json()?)
 }
 
-fn verify_crate_version(
-    name: &str,
-    version: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn verify_crate_version(name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{CRATES_API}/crates/{name}/{version}");
 
     let client = reqwest::blocking::Client::new();

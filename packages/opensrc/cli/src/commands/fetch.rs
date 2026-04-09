@@ -1,14 +1,11 @@
 use std::path::PathBuf;
 
 use crate::lib::cache::{
-    get_absolute_path, list_sources, now_iso, write_sources, PackageEntry,
-    RepoEntry,
+    get_absolute_path, list_sources, now_iso, write_sources, PackageEntry, RepoEntry,
 };
 use crate::lib::git::{fetch_repo_source, fetch_source, FetchResult};
 use crate::lib::registries::repo::{parse_repo_spec, resolve_repo};
-use crate::lib::registries::{
-    detect_input_type, parse_package_spec, resolve_package, Registry,
-};
+use crate::lib::registries::{detect_input_type, parse_package_spec, resolve_package, Registry};
 use crate::lib::version::detect_installed_version;
 
 fn registry_label(r: Registry) -> &'static str {
@@ -31,7 +28,10 @@ fn fetch_repo_input(spec: &str) -> FetchResult {
     };
 
     let display = format!("{}/{}/{}", repo_spec.host, repo_spec.owner, repo_spec.repo);
-    println!("\nFetching {}/{} from {}...", repo_spec.owner, repo_spec.repo, repo_spec.host);
+    println!(
+        "\nFetching {}/{} from {}...",
+        repo_spec.owner, repo_spec.repo, repo_spec.host
+    );
 
     match resolve_repo(&repo_spec) {
         Ok(resolved) => {
@@ -47,7 +47,10 @@ fn fetch_repo_input(spec: &str) -> FetchResult {
                     println!("  ⚠ {warn}");
                 }
             } else {
-                println!("  ✗ Failed: {}", result.error.as_deref().unwrap_or("unknown"));
+                println!(
+                    "  ✗ Failed: {}",
+                    result.error.as_deref().unwrap_or("unknown")
+                );
             }
             result
         }
@@ -85,7 +88,10 @@ fn fetch_package_input(spec: &str, cwd: &str) -> FetchResult {
     } else if version.is_none() {
         println!("  → Using latest version");
     } else {
-        println!("  → Using specified version: {}", version.as_deref().unwrap());
+        println!(
+            "  → Using specified version: {}",
+            version.as_deref().unwrap()
+        );
     }
 
     println!("  → Resolving repository...");
@@ -112,7 +118,10 @@ fn fetch_package_input(spec: &str, cwd: &str) -> FetchResult {
                     println!("  ⚠ {warn}");
                 }
             } else {
-                println!("  ✗ Failed: {}", result.error.as_deref().unwrap_or("unknown"));
+                println!(
+                    "  ✗ Failed: {}",
+                    result.error.as_deref().unwrap_or("unknown")
+                );
             }
             result
         }

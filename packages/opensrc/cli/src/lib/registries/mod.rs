@@ -101,9 +101,7 @@ pub fn parse_package_spec(spec: &str) -> PackageSpec {
     }
 }
 
-pub fn resolve_package(
-    spec: &PackageSpec,
-) -> Result<ResolvedPackage, Box<dyn std::error::Error>> {
+pub fn resolve_package(spec: &PackageSpec) -> Result<ResolvedPackage, Box<dyn std::error::Error>> {
     match spec.registry {
         Registry::Npm => npm::resolve_npm_package(&spec.name, spec.version.as_deref()),
         Registry::PyPI => pypi::resolve_pypi_package(&spec.name, spec.version.as_deref()),

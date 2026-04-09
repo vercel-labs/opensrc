@@ -41,7 +41,12 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
             Err(_) => return None,
         };
         host = url.host_str()?.to_string();
-        let path_parts: Vec<&str> = url.path().trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+        let path_parts: Vec<&str> = url
+            .path()
+            .trim_start_matches('/')
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
 
         if path_parts.len() < 2 {
             return None;
@@ -57,8 +62,16 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
             git_ref = Some(path_parts[3].to_string());
         }
 
-        return Some(RepoSpec { host, owner, repo, git_ref });
-    } else if SUPPORTED_HOSTS.iter().any(|h| remaining.starts_with(&format!("{h}/"))) {
+        return Some(RepoSpec {
+            host,
+            owner,
+            repo,
+            git_ref,
+        });
+    } else if SUPPORTED_HOSTS
+        .iter()
+        .any(|h| remaining.starts_with(&format!("{h}/")))
+    {
         if let Some(idx) = remaining.find('/') {
             host = remaining[..idx].to_string();
             remaining = remaining[idx + 1..].to_string();
@@ -108,7 +121,10 @@ pub fn is_repo_spec(spec: &str) -> bool {
         return true;
     }
 
-    if SUPPORTED_HOSTS.iter().any(|h| trimmed.starts_with(&format!("{h}/"))) {
+    if SUPPORTED_HOSTS
+        .iter()
+        .any(|h| trimmed.starts_with(&format!("{h}/")))
+    {
         return true;
     }
 
@@ -118,7 +134,13 @@ pub fn is_repo_spec(spec: &str) -> bool {
 
     let parts: Vec<&str> = trimmed.split('/').collect();
     if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
-        let repo_part = parts[1].split('@').next().unwrap_or("").split('#').next().unwrap_or("");
+        let repo_part = parts[1]
+            .split('@')
+            .next()
+            .unwrap_or("")
+            .split('#')
+            .next()
+            .unwrap_or("");
         let valid_owner = regex::Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
             .unwrap()
             .is_match(parts[0]);
@@ -154,10 +176,7 @@ pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error:
 }
 
 fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
-    let url = format!(
-        "https://api.github.com/repos/{}/{}",
-        spec.owner, spec.repo
-    );
+    let url = format!("https://api.github.com/repos/{}/{}", spec.owner, spec.repo);
 
     let client = reqwest::blocking::Client::new();
     let resp = client
@@ -255,8 +274,7 @@ mod tests {
 
     #[test]
     fn test_parse_repo_spec_full_url() {
-        let spec =
-            parse_repo_spec("https://github.com/vercel/next.js/tree/canary").unwrap();
+        let spec = parse_repo_spec("https://github.com/vercel/next.js/tree/canary").unwrap();
         assert_eq!(spec.host, "github.com");
         assert_eq!(spec.owner, "vercel");
         assert_eq!(spec.repo, "next.js");

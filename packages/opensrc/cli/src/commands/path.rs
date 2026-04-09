@@ -21,11 +21,7 @@ fn registry_label(r: Registry) -> &'static str {
     r.label()
 }
 
-fn handle_package(
-    spec: &str,
-    cwd: &str,
-    verbose: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_package(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let parsed = parse_package_spec(spec);
     let registry = parsed.registry;
     let name = parsed.name.clone();
@@ -106,11 +102,7 @@ fn handle_package(
     Ok(())
 }
 
-fn handle_repo(
-    spec: &str,
-    _cwd: &str,
-    verbose: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_repo(spec: &str, _cwd: &str, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let repo_spec = match parse_repo_spec(spec) {
         Some(s) => s,
         None => {
@@ -171,11 +163,7 @@ fn handle_repo(
     Ok(())
 }
 
-pub fn run(
-    spec: &str,
-    cwd: Option<&str>,
-    verbose: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(spec: &str, cwd: Option<&str>, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let cwd = cwd.unwrap_or(".");
     let input_type = detect_input_type(spec);
 

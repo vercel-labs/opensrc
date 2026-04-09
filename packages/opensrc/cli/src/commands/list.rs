@@ -26,7 +26,10 @@ pub fn run(json: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut displayed_packages = false;
 
     for registry in &registries {
-        let pkgs: Vec<_> = packages.iter().filter(|p| p.registry == *registry).collect();
+        let pkgs: Vec<_> = packages
+            .iter()
+            .filter(|p| p.registry == *registry)
+            .collect();
         if pkgs.is_empty() {
             continue;
         }

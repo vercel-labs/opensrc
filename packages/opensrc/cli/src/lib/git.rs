@@ -2,9 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use super::cache::{
-    get_repo_display_name, get_repo_path, get_repo_relative_path,
-};
+use super::cache::{get_repo_display_name, get_repo_path, get_repo_relative_path};
 use super::registries::repo::ResolvedRepo;
 use super::registries::{Registry, ResolvedPackage};
 
@@ -58,13 +56,7 @@ fn clone_at_tag(repo_url: &str, target: &Path, version: &str) -> CloneResult {
 
     // Fallback: clone default branch
     let status = Command::new("git")
-        .args([
-            "clone",
-            "--depth",
-            "1",
-            repo_url,
-            &target.to_string_lossy(),
-        ])
+        .args(["clone", "--depth", "1", repo_url, &target.to_string_lossy()])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
@@ -112,13 +104,7 @@ fn clone_at_ref(repo_url: &str, target: &Path, git_ref: &str) -> CloneResult {
 
     // Fallback: clone default branch
     let status = Command::new("git")
-        .args([
-            "clone",
-            "--depth",
-            "1",
-            repo_url,
-            &target.to_string_lossy(),
-        ])
+        .args(["clone", "--depth", "1", repo_url, &target.to_string_lossy()])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();

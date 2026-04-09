@@ -33,8 +33,16 @@ pub fn run(
 
     if clean_packages {
         if let Some(reg) = registry {
-            packages_to_remove = packages.iter().filter(|p| p.registry == reg).cloned().collect();
-            remaining_packages = packages.iter().filter(|p| p.registry != reg).cloned().collect();
+            packages_to_remove = packages
+                .iter()
+                .filter(|p| p.registry == reg)
+                .cloned()
+                .collect();
+            remaining_packages = packages
+                .iter()
+                .filter(|p| p.registry != reg)
+                .cloned()
+                .collect();
         } else {
             packages_to_remove = packages.clone();
             remaining_packages = Vec::new();

@@ -52,8 +52,7 @@ pub fn get_repos_dir() -> PathBuf {
 
 /// Extract host/owner/repo from a git URL.
 pub fn parse_repo_url(url: &str) -> Option<(String, String, String)> {
-    let re_https =
-        regex::Regex::new(r"https?://([^/]+)/([^/]+)/([^/]+)").unwrap();
+    let re_https = regex::Regex::new(r"https?://([^/]+)/([^/]+)/([^/]+)").unwrap();
     if let Some(caps) = re_https.captures(url) {
         let repo = caps[3].trim_end_matches(".git").to_string();
         return Some((caps[1].to_string(), caps[2].to_string(), repo));
@@ -158,16 +157,20 @@ pub fn remove_package_source(
     registry: Registry,
 ) -> Result<(bool, bool), Box<dyn std::error::Error>> {
     let (packages, _) = list_sources();
-    let pkg = match packages.iter().find(|p| p.name == name && p.registry == registry) {
+    let pkg = match packages
+        .iter()
+        .find(|p| p.name == name && p.registry == registry)
+    {
         Some(p) => p.clone(),
         None => return Ok((false, false)),
     };
 
     let pkg_repo_base = extract_repo_base_path(&pkg.path);
 
-    let others_use_same = packages
-        .iter()
-        .any(|p| extract_repo_base_path(&p.path) == pkg_repo_base && !(p.name == name && p.registry == registry));
+    let others_use_same = packages.iter().any(|p| {
+        extract_repo_base_path(&p.path) == pkg_repo_base
+            && !(p.name == name && p.registry == registry)
+    });
 
     let mut repo_removed = false;
 
@@ -257,13 +260,19 @@ mod tests {
     #[test]
     fn test_parse_repo_url_https() {
         let result = parse_repo_url("https://github.com/colinhacks/zod").unwrap();
-        assert_eq!(result, ("github.com".into(), "colinhacks".into(), "zod".into()));
+        assert_eq!(
+            result,
+            ("github.com".into(), "colinhacks".into(), "zod".into())
+        );
     }
 
     #[test]
     fn test_parse_repo_url_ssh() {
         let result = parse_repo_url("git@github.com:colinhacks/zod.git").unwrap();
-        assert_eq!(result, ("github.com".into(), "colinhacks".into(), "zod".into()));
+        assert_eq!(
+            result,
+            ("github.com".into(), "colinhacks".into(), "zod".into())
+        );
     }
 
     #[test]

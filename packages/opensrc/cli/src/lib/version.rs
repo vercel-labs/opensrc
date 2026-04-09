@@ -2,11 +2,16 @@ use std::fs;
 use std::path::Path;
 
 fn strip_version_prefix(version: &str) -> String {
-    version.trim_start_matches(|c: char| "^~>=<".contains(c)).to_string()
+    version
+        .trim_start_matches(|c: char| "^~>=<".contains(c))
+        .to_string()
 }
 
 fn version_from_node_modules(package_name: &str, cwd: &Path) -> Option<String> {
-    let path = cwd.join("node_modules").join(package_name).join("package.json");
+    let path = cwd
+        .join("node_modules")
+        .join(package_name)
+        .join("package.json");
     let content = fs::read_to_string(path).ok()?;
     let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
     parsed.get("version")?.as_str().map(|s| s.to_string())
@@ -56,9 +61,7 @@ fn version_from_yarn_lock(package_name: &str, cwd: &Path) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
 
     let escaped = regex::escape(package_name);
-    let pattern = format!(
-        r#""?{escaped}@[^":\n]+[":]?\s*\n\s*version\s+["']?([^"'\n]+)"#
-    );
+    let pattern = format!(r#""?{escaped}@[^":\n]+[":]?\s*\n\s*version\s+["']?([^"'\n]+)"#);
     let re = regex::Regex::new(&pattern).ok()?;
 
     let caps = re.captures(&content)?;
