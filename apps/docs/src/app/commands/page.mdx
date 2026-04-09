@@ -1,23 +1,36 @@
 # Commands
 
-## fetch (default)
+## path
 
-Fetch and cache source code for a package or repository. This is the default command — no subcommand needed:
+Print the absolute path to a package's source code, fetching automatically on cache miss. Designed for composing with other tools:
 
 ```bash
-opensrc zod
-opensrc pypi:requests
+rg "parse" $(opensrc path zod)
+cat $(opensrc path zod)/src/types.ts
+find $(opensrc path pypi:requests) -name "*.py"
+ls $(opensrc path crates:serde)/src/
+grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
+```
+
+Progress output goes to stderr, the path to stdout, so `$(opensrc path ...)` works in subshells.
+
+| Flag | Description |
+|------|-------------|
+| `--cwd <path>` | Working directory for lockfile version resolution |
+| `--verbose` | Show progress during fetch |
+
+## fetch
+
+Fetch and cache source code without printing the path. Useful for warming the cache with multiple packages at once:
+
+```bash
+opensrc zod react next
+opensrc pypi:requests pypi:flask
+opensrc crates:serde crates:tokio
 opensrc vercel/ai
 ```
 
-## path
-
-Print the absolute path to cached source code. Fetches automatically if not already cached. Useful for piping into other tools:
-
-```bash
-opensrc path zod
-opensrc path --verbose zod
-```
+This is the default command when no subcommand is given.
 
 ## list
 

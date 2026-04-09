@@ -2,27 +2,31 @@
 
 ## Overview
 
-opensrc resolves packages from their registry, clones the source repository at the correct version tag, and caches it locally. AI coding agents can then read the full implementation — not just type definitions — for deeper understanding.
+opensrc resolves packages from their registry, clones the source repository at the correct version tag, and caches it globally. Use `opensrc path` inside other commands to search, read, or explore the source.
 
 ```
-Agent asks about zod → opensrc resolves npm registry
-→ finds GitHub repo + version tag → git clone --depth 1
-→ cached at ~/.opensrc/packages/zod/
+rg "parse" $(opensrc path zod)
+→ resolves npm registry → finds GitHub repo + version tag
+→ git clone --depth 1 → cached at ~/.opensrc/repos/github.com/colinhacks/zod/v3.24.1/
+→ prints path to stdout → rg searches the source
 ```
 
 ## Resolution
 
-When you run `opensrc zod`, the following happens:
+When you run `opensrc path zod`, the following happens:
 
 1. **Registry lookup** — queries the npm registry for the `zod` package metadata
 2. **Repository detection** — extracts the `repository` field from `package.json` to find the source repo URL
 3. **Version tagging** — maps the installed or latest version to a git tag (e.g. `v3.24.1`)
 4. **Shallow clone** — runs `git clone --depth 1 --branch v3.24.1` for a fast, minimal checkout
-5. **Cache storage** — stores the result in `~/.opensrc/packages/zod/`
+5. **Cache storage** — stores the result in `~/.opensrc/repos/github.com/colinhacks/zod/v3.24.1/`
+6. **Path output** — prints the absolute path to stdout (progress goes to stderr so subshells work)
+
+On subsequent runs, steps 1-4 are skipped and the cached path is returned instantly.
 
 ## Version Detection
 
-opensrc tries to detect the version you're actually using in your project. It checks (in order):
+For npm packages, opensrc tries to detect the version you're actually using in your project. It checks (in order):
 
 1. `node_modules/<package>/package.json`
 2. `package-lock.json`
@@ -38,16 +42,18 @@ All source code is cached in `~/.opensrc/`:
 
 ```
 ~/.opensrc/
-├── packages/        # Registry packages (npm, pypi, crates)
-│   ├── zod/
-│   ├── pypi--requests/
-│   └── crates--serde/
-├── repos/           # Direct repository clones
+├── repos/
 │   └── github.com/
+│       ├── colinhacks/
+│       │   └── zod/
+│       │       └── v3.24.1/
 │       └── vercel/
 │           └── ai/
-└── sources.json     # Metadata for all cached sources
+│               └── main/
+└── sources.json
 ```
+
+The `OPENSRC_HOME` environment variable overrides the default cache location.
 
 ## Metadata
 
@@ -55,34 +61,39 @@ All source code is cached in `~/.opensrc/`:
 
 ```json
 {
-  "packages": {
-    "zod": {
+  "packages": [
+    {
+      "name": "zod",
       "version": "3.24.1",
       "registry": "npm",
-      "fetched_at": "2025-01-15T10:30:00Z"
+      "path": "repos/github.com/colinhacks/zod/v3.24.1",
+      "fetchedAt": "2025-01-15T10:30:00Z"
     }
-  },
-  "repos": {
-    "github.com/vercel/ai": {
-      "ref": "main",
-      "fetched_at": "2025-01-15T10:30:00Z"
+  ],
+  "repos": [
+    {
+      "name": "github.com/vercel/ai",
+      "version": "main",
+      "path": "repos/github.com/vercel/ai/main",
+      "fetchedAt": "2025-01-15T10:30:00Z"
     }
-  }
+  ]
 }
 ```
 
 ## AGENTS.md Integration
 
-opensrc is designed to be referenced in your `AGENTS.md` file so AI coding agents know how to fetch source code:
+opensrc is designed to be referenced in your `AGENTS.md` file so AI coding agents know how to read source code:
 
 ```markdown
 ## Source Code Reference
 
-Source code for dependencies is available in `opensrc/`.
+Source code for dependencies is cached at `~/.opensrc/`.
 
-To fetch source code for a package:
+Use `opensrc path` inside other commands to read source:
 
 \`\`\`bash
-npx opensrc <package>
+rg "pattern" $(opensrc path <package>)
+cat $(opensrc path <package>)/path/to/file
 \`\`\`
 ```

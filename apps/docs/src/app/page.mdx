@@ -1,46 +1,36 @@
 # Getting Started
 
-opensrc fetches source code for packages to give coding agents deeper context. Instead of relying only on types and interfaces, agents can read the actual implementation.
+opensrc gives coding agents access to any package's source code. Use `opensrc path` inside other commands to search, read, or explore implementations — not just types.
 
 ## Install
-
-**Global (recommended):**
 
 ```bash
 npm install -g opensrc
 ```
 
-**Or run directly with npx:**
-
-```bash
-npx opensrc zod
-```
-
 ## Usage
 
-Fetch source code for any npm package:
+Search a package's source with `rg`, `grep`, or any tool:
 
 ```bash
-opensrc zod
+rg "parse" $(opensrc path zod)
 ```
 
-Python packages from PyPI:
+Read a specific file:
 
 ```bash
-opensrc pypi:requests
+cat $(opensrc path zod)/src/types.ts
 ```
 
-Rust crates from crates.io:
+Works with any registry:
 
 ```bash
-opensrc crates:serde
+find $(opensrc path pypi:requests) -name "*.py"
+ls $(opensrc path crates:serde)/src/
+grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
 ```
 
-GitHub repositories:
-
-```bash
-opensrc vercel/ai
-```
+`opensrc path` fetches on first use, then returns the cached path instantly. Progress goes to stderr, the path to stdout, so `$(opensrc path ...)` works in subshells.
 
 ## Requirements
 

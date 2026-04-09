@@ -1,6 +1,6 @@
 # opensrc
 
-Fetch source code for packages to give coding agents deeper context. Clones repositories at the correct version tag and caches them globally at `~/.opensrc/`.
+Give coding agents access to any package's source code. Resolves packages from registry APIs, shallow-clones at the correct version tag, and caches globally at `~/.opensrc/`.
 
 ## Install
 
@@ -8,37 +8,42 @@ Fetch source code for packages to give coding agents deeper context. Clones repo
 npm install -g opensrc
 ```
 
-Or use directly with npx:
-
-```bash
-npx opensrc zod
-```
+Installing globally gives you the native Rust binary directly — no Node.js overhead on each run.
 
 ## Usage
 
-### Fetch source code
+### Use source inline with other tools
 
-```bash
-opensrc zod                  # npm package (latest or installed version)
-opensrc zod@3.22.0           # specific version
-opensrc pypi:requests        # PyPI package
-opensrc crates:serde         # crates.io package
-opensrc vercel/next.js       # GitHub repository
-```
-
-### Get path to cached source
-
-The `path` command prints the absolute path to cached source, fetching on cache miss. Designed for subshell usage:
+`opensrc path` prints the absolute path to a package's source, fetching on cache miss. Compose it with any tool:
 
 ```bash
 rg "parse" $(opensrc path zod)
 cat $(opensrc path zod)/src/types.ts
 find $(opensrc path pypi:requests) -name "*.py"
+ls $(opensrc path crates:serde)/src/
+grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
+```
+
+Specific versions:
+
+```bash
+rg "ZodError" $(opensrc path zod@3.22.0)
+cat $(opensrc path pypi:flask@3.0.0)/src/flask/app.py
 ```
 
 Options:
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
+
+### Batch prefetch
+
+Fetch multiple packages at once to warm the cache:
+
+```bash
+opensrc zod react next
+opensrc pypi:requests pypi:flask
+opensrc crates:serde crates:tokio
+```
 
 ### List cached sources
 
@@ -70,11 +75,11 @@ opensrc clean --crates   # only crates.io packages
 
 | Registry | Prefix | Example |
 |----------|--------|---------|
-| npm | _(default)_ or `npm:` | `opensrc zod`, `opensrc npm:react` |
-| PyPI | `pypi:`, `pip:`, `python:` | `opensrc pypi:requests` |
-| crates.io | `crates:`, `cargo:`, `rust:` | `opensrc crates:serde` |
-| GitHub | `owner/repo` or URL | `opensrc vercel/next.js` |
-| GitLab | `gitlab:` or URL | `opensrc gitlab:owner/repo` |
+| npm | _(default)_ or `npm:` | `opensrc path zod` |
+| PyPI | `pypi:`, `pip:`, `python:` | `opensrc path pypi:requests` |
+| crates.io | `crates:`, `cargo:`, `rust:` | `opensrc path crates:serde` |
+| GitHub | `owner/repo` or URL | `opensrc path vercel/next.js` |
+| GitLab | `gitlab:` or URL | `opensrc path gitlab:owner/repo` |
 
 ## How It Works
 

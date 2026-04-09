@@ -7,9 +7,9 @@ opensrc resolves packages from multiple registries. The registry is detected aut
 The default registry. Pass a package name directly:
 
 ```bash
-opensrc zod
-opensrc @vercel/ai
-opensrc next
+rg "ZodType" $(opensrc path zod)
+cat $(opensrc path next)/package.json
+opensrc path @vercel/ai
 ```
 
 ## PyPI
@@ -17,9 +17,9 @@ opensrc next
 Use the `pypi:` prefix for Python packages:
 
 ```bash
-opensrc pypi:requests
-opensrc pypi:flask
-opensrc pypi:pydantic
+find $(opensrc path pypi:requests) -name "*.py"
+cat $(opensrc path pypi:flask)/src/flask/app.py
+opensrc path pypi:pydantic
 ```
 
 ## crates.io
@@ -27,9 +27,9 @@ opensrc pypi:pydantic
 Use the `crates:` prefix for Rust crates:
 
 ```bash
-opensrc crates:serde
-opensrc crates:tokio
-opensrc crates:clap
+ls $(opensrc path crates:serde)/src/
+rg "derive" $(opensrc path crates:clap)
+opensrc path crates:tokio
 ```
 
 ## GitHub
@@ -37,9 +37,9 @@ opensrc crates:clap
 Pass `owner/repo` to fetch from GitHub directly:
 
 ```bash
-opensrc vercel/ai
-opensrc facebook/react
-opensrc tokio-rs/tokio
+rg "Router" $(opensrc path vercel/next.js)/packages/next/src/
+cat $(opensrc path facebook/react)/packages/react/src/React.js
+opensrc path tokio-rs/tokio
 ```
 
 ## GitLab
@@ -47,7 +47,7 @@ opensrc tokio-rs/tokio
 Use the `gitlab:` prefix:
 
 ```bash
-opensrc gitlab:owner/repo
+opensrc path gitlab:owner/repo
 ```
 
 ## Bitbucket
@@ -55,16 +55,16 @@ opensrc gitlab:owner/repo
 Use the `bitbucket:` prefix:
 
 ```bash
-opensrc bitbucket:owner/repo
+opensrc path bitbucket:owner/repo
 ```
 
 ## Summary
 
 | Registry | Prefix | Example |
 |----------|--------|---------|
-| npm | _(none)_ | `opensrc zod` |
-| PyPI | `pypi:` | `opensrc pypi:requests` |
-| crates.io | `crates:` | `opensrc crates:serde` |
-| GitHub | `owner/repo` | `opensrc vercel/ai` |
-| GitLab | `gitlab:` | `opensrc gitlab:owner/repo` |
-| Bitbucket | `bitbucket:` | `opensrc bitbucket:owner/repo` |
+| npm | _(none)_ | `opensrc path zod` |
+| PyPI | `pypi:` | `opensrc path pypi:requests` |
+| crates.io | `crates:` | `opensrc path crates:serde` |
+| GitHub | `owner/repo` | `opensrc path vercel/ai` |
+| GitLab | `gitlab:` | `opensrc path gitlab:owner/repo` |
+| Bitbucket | `bitbucket:` | `opensrc path bitbucket:owner/repo` |

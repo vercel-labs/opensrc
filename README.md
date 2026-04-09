@@ -1,6 +1,25 @@
 # opensrc
 
-Fetch source code for packages to give coding agents deeper context.
+Give coding agents access to any package's source code.
+
+## Quick Start
+
+```bash
+npm install -g opensrc
+```
+
+```bash
+# Search a package's source
+rg "parse" $(opensrc path zod)
+
+# Read a specific file
+cat $(opensrc path zod)/src/types.ts
+
+# Works with any registry
+find $(opensrc path pypi:requests) -name "*.py"
+```
+
+`opensrc path` fetches on first use, then returns the cached path instantly. See the [CLI readme](packages/opensrc/README.md) for full usage.
 
 ## Packages
 
@@ -8,14 +27,6 @@ Fetch source code for packages to give coding agents deeper context.
 |---------|-------------|
 | [`opensrc`](packages/opensrc) | CLI — fetch and cache source code from npm, PyPI, crates.io, and GitHub |
 | [`@opensrc/docs`](apps/docs) | Documentation site |
-
-## Quick Start
-
-```bash
-npx opensrc zod
-```
-
-See the [CLI readme](packages/opensrc/README.md) for full usage.
 
 ## Development
 
