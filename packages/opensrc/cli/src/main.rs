@@ -56,6 +56,9 @@ enum Commands {
         /// Only remove crates.io packages
         #[arg(long)]
         crates: bool,
+        /// Only remove Go module packages
+        #[arg(long)]
+        go: bool,
     },
 }
 
@@ -79,6 +82,7 @@ fn main() {
             npm,
             pypi,
             crates,
+            go,
         }) => {
             let registry = if npm {
                 Some(core::registries::Registry::Npm)
@@ -86,6 +90,8 @@ fn main() {
                 Some(core::registries::Registry::PyPI)
             } else if crates {
                 Some(core::registries::Registry::Crates)
+            } else if go {
+                Some(core::registries::Registry::Go)
             } else {
                 None
             };
