@@ -2,7 +2,7 @@
 
 ## path
 
-Print the absolute path to a package's source code, fetching automatically on cache miss. Designed for composing with other tools:
+Print the absolute path to a package's source code, fetching automatically on cache miss. This is the primary command for using opensrc — compose it with any shell tool:
 
 ```bash
 rg "parse" $(opensrc path zod)
@@ -12,25 +12,24 @@ ls $(opensrc path crates:serde)/src/
 grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
 ```
 
-Progress output goes to stderr, the path to stdout, so `$(opensrc path ...)` works in subshells.
+Progress output goes to stderr, the path to stdout, so `$(opensrc path ...)` works cleanly in subshells.
+
+### Multiple packages
+
+Pass multiple specs to print one path per line:
+
+```bash
+opensrc path zod react next
+opensrc path pypi:requests pypi:flask
+opensrc path crates:serde crates:tokio
+```
+
+### Options
 
 | Flag | Description |
 |------|-------------|
 | `--cwd <path>` | Working directory for lockfile version resolution |
 | `--verbose` | Show progress during fetch |
-
-## fetch
-
-Fetch and cache source code without printing the path. Useful for warming the cache with multiple packages at once:
-
-```bash
-opensrc zod react next
-opensrc pypi:requests pypi:flask
-opensrc crates:serde crates:tokio
-opensrc vercel/ai
-```
-
-This is the default command when no subcommand is given.
 
 ## list
 

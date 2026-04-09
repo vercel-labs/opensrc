@@ -1,7 +1,7 @@
 ---
 name: opensrc
-description: Fetch dependency source code to give AI agents deeper implementation context. Use when the agent needs to understand how a library works internally, read source code for a package, fetch implementation details for a dependency, or explore how an npm/PyPI/crates.io package is built. Triggers include "fetch source for", "read the source of", "how does X work internally", "get the implementation of", "npx opensrc", or any task requiring access to dependency source code beyond types and docs.
-allowed-tools: Bash(npx opensrc:*), Bash(opensrc:*)
+description: Fetch dependency source code to give AI agents deeper implementation context. Use when the agent needs to understand how a library works internally, read source code for a package, fetch implementation details for a dependency, or explore how an npm/PyPI/crates.io package is built. Triggers include "fetch source for", "read the source of", "how does X work internally", "get the implementation of", "opensrc path", or any task requiring access to dependency source code beyond types and docs.
+allowed-tools: Bash(opensrc:*)
 ---
 
 # Source Code Fetching with opensrc
@@ -21,16 +21,15 @@ find $(opensrc path zod) -name "*.test.ts"
 ## Fetching Source Code
 
 ```bash
-# The path command fetches on cache miss (preferred for single packages)
 opensrc path zod
 opensrc path pypi:requests
 opensrc path crates:serde
 opensrc path facebook/react
 
-# Fetch multiple packages at once
-opensrc zod react next
-opensrc pypi:requests pypi:flask
-opensrc crates:serde crates:tokio
+# Multiple packages at once
+opensrc path zod react next
+opensrc path pypi:requests pypi:flask
+opensrc path crates:serde crates:tokio
 
 # Specific versions
 opensrc path zod@3.22.0

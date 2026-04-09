@@ -160,8 +160,7 @@ fn handle_repo(spec: &str, _cwd: &str, verbose: bool) -> Result<(), Box<dyn std:
     Ok(())
 }
 
-pub fn run(spec: &str, cwd: Option<&str>, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let cwd = cwd.unwrap_or(".");
+fn run_one(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let input_type = detect_input_type(spec);
 
     if input_type == "repo" {
@@ -169,4 +168,16 @@ pub fn run(spec: &str, cwd: Option<&str>, verbose: bool) -> Result<(), Box<dyn s
     } else {
         handle_package(spec, cwd, verbose)
     }
+}
+
+pub fn run(
+    specs: &[String],
+    cwd: Option<&str>,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cwd = cwd.unwrap_or(".");
+    for spec in specs {
+        run_one(spec, cwd, verbose)?;
+    }
+    Ok(())
 }

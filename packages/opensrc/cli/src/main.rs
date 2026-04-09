@@ -12,22 +12,15 @@ use clap::{Parser, Subcommand};
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-
-    /// Packages or repos to fetch (e.g., zod, pypi:requests, owner/repo)
-    #[arg(trailing_var_arg = true)]
-    packages: Vec<String>,
-
-    /// Working directory for lockfile version resolution
-    #[arg(long)]
-    cwd: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     /// Print the absolute path to cached source (fetches on cache miss)
     Path {
-        /// Package or repo spec
-        package: String,
+        /// Packages or repo specs (e.g., zod, pypi:requests, owner/repo)
+        #[arg(required = true)]
+        packages: Vec<String>,
         /// Working directory for lockfile version resolution
         #[arg(long)]
         cwd: Option<String>,
@@ -73,10 +66,10 @@ fn main() {
 
     let result = match cli.command {
         Some(Commands::Path {
-            package,
+            packages,
             cwd,
             verbose,
-        }) => commands::path::run(&package, cwd.as_deref(), verbose),
+        }) => commands::path::run(&packages, cwd.as_deref(), verbose),
 
         Some(Commands::List { json }) => commands::list::run(json),
 
@@ -103,12 +96,8 @@ fn main() {
         }
 
         None => {
-            if cli.packages.is_empty() {
-                Cli::parse_from(["opensrc", "--help"]);
-                Ok(())
-            } else {
-                commands::fetch::run(&cli.packages, cli.cwd.as_deref())
-            }
+            Cli::parse_from(["opensrc", "--help"]);
+            Ok(())
         }
     };
 

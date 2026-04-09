@@ -12,8 +12,6 @@ Installing globally gives you the native Rust binary directly — no Node.js ove
 
 ## Usage
 
-### Use source inline with other tools
-
 `opensrc path` prints the absolute path to a package's source, fetching on cache miss. Compose it with any tool:
 
 ```bash
@@ -22,6 +20,12 @@ cat $(opensrc path zod)/src/types.ts
 find $(opensrc path pypi:requests) -name "*.py"
 ls $(opensrc path crates:serde)/src/
 grep -r "Router" $(opensrc path vercel/next.js)/packages/next/src/
+```
+
+Multiple packages at once:
+
+```bash
+rg "parse" $(opensrc path zod react next)
 ```
 
 Specific versions:
@@ -34,16 +38,6 @@ cat $(opensrc path pypi:flask@3.0.0)/src/flask/app.py
 Options:
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
-
-### Batch prefetch
-
-Fetch multiple packages at once to warm the cache:
-
-```bash
-opensrc zod react next
-opensrc pypi:requests pypi:flask
-opensrc crates:serde crates:tokio
-```
 
 ### List cached sources
 
