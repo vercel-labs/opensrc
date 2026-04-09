@@ -269,6 +269,18 @@ jobs:
           fi
           echo "Found $BINARY_COUNT binaries"
 
+      - name: Extract changelog entry
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          awk '/<!-- release:start -->/{found=1; next} /<!-- release:end -->/{found=0} found{print}' CHANGELOG.md > /tmp/release-notes.md
+
+          LINES=$(wc -l < /tmp/release-notes.md | tr -d ' ')
+          if [ "$LINES" -lt 2 ]; then
+            echo "Error: No release notes found between <!-- release:start --> and <!-- release:end --> markers in CHANGELOG.md"
+            exit 1
+          fi
+          echo "Extracted release notes for $VERSION ($LINES lines)"
+
       - name: Create GitHub Release
         run: |
           VERSION="${{ needs.check-release.outputs.version }}"
@@ -281,7 +293,7 @@ jobs:
             echo "Creating release $TAG..."
             gh release create "$TAG" \
               --title "$TAG" \
-              --generate-notes \
+              --notes-file /tmp/release-notes.md \
               bin/opensrc-*
           fi
         env:

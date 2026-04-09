@@ -26,6 +26,24 @@ The CLI is a **Rust** binary with an npm shim. The Rust crate lives in `packages
 
 Or from root: `turbo dev`, `turbo build`
 
+## Releasing
+
+Releases are manual, single-PR affairs. The maintainer controls the changelog voice and format.
+
+To prepare a release:
+
+1. Create a branch (e.g. `prepare-v0.7.0`)
+2. Bump `version` in `packages/opensrc/package.json`
+3. Run `cd packages/opensrc && npm run version:sync` to update `cli/Cargo.toml` and `cli/Cargo.lock`
+4. Write the changelog entry in `CHANGELOG.md` at the top, under a new `## <version>` heading, wrapped in `<!-- release:start -->` and `<!-- release:end -->` markers. Remove the markers from the previous release entry so only the new release has markers.
+5. Open a PR and merge to `main`
+
+When the PR merges, CI compares `packages/opensrc/package.json` version to what's on npm. If it differs, it builds all 7 platform binaries, publishes to npm, and creates the GitHub release automatically. The GitHub release body is extracted from the content between the `<!-- release:start -->` and `<!-- release:end -->` markers in `CHANGELOG.md`.
+
+### Writing the changelog
+
+Review the git log since the last release and write the entry in `CHANGELOG.md`. Follow the existing format and voice. Group changes under `### New Features`, `### Bug Fixes`, `### Improvements`, etc. Bold the feature/fix name, then describe it concisely. Reference PR numbers in parentheses.
+
 <!-- opensrc:start -->
 
 ## Source Code Reference
