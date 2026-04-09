@@ -1,19 +1,10 @@
 use std::fs;
 
 use crate::lib::cache::{
-    cleanup_empty_dirs, get_opensrc_dir, get_repos_dir, list_sources, write_sources, PackageEntry,
-    RepoEntry,
+    cleanup_empty_dirs, extract_repo_base_path, get_opensrc_dir, get_repos_dir, list_sources,
+    write_sources, PackageEntry, RepoEntry,
 };
 use crate::lib::registries::Registry;
-
-fn extract_repo_base_path(full_path: &str) -> String {
-    let parts: Vec<&str> = full_path.split('/').collect();
-    if parts.len() >= 4 && parts[0] == "repos" {
-        parts[..4].join("/")
-    } else {
-        full_path.to_string()
-    }
-}
 
 pub fn run(
     clean_packages_flag: bool,
@@ -75,11 +66,15 @@ pub fn run(
         pkg_paths.union(&repo_paths).cloned().collect();
     let opensrc_dir = get_opensrc_dir();
 
+    let mut delete_errors = 0usize;
     for repo_path in &all_paths {
         if !needed_paths.contains(repo_path) {
             let full = opensrc_dir.join(repo_path);
             if full.exists() {
-                let _ = fs::remove_dir_all(&full);
+                if let Err(e) = fs::remove_dir_all(&full) {
+                    eprintln!("Warning: failed to remove {}: {e}", full.display());
+                    delete_errors += 1;
+                }
             }
         }
     }
@@ -114,5 +109,10 @@ pub fn run(
     }
 
     println!("\nCleaned {total} source(s)");
+
+    if delete_errors > 0 {
+        return Err(format!("Failed to remove {delete_errors} path(s) from disk").into());
+    }
+
     Ok(())
 }

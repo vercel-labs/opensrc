@@ -1,8 +1,15 @@
-use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use serde::{Deserialize, Serialize};
 
 use super::registries::Registry;
+
+static RE_HTTPS_REPO: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"https?://([^/]+)/([^/]+)/([^/]+)").unwrap());
+static RE_SSH_REPO: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"git@([^:]+):([^/]+)/(.+)").unwrap());
 
 const OPENSRC_DIR: &str = ".opensrc";
 const REPOS_DIR: &str = "repos";
@@ -41,9 +48,13 @@ pub fn get_opensrc_dir() -> PathBuf {
     if let Ok(home) = std::env::var("OPENSRC_HOME") {
         return PathBuf::from(home);
     }
-    dirs::home_dir()
-        .expect("could not determine home directory")
-        .join(OPENSRC_DIR)
+    match dirs::home_dir() {
+        Some(h) => h.join(OPENSRC_DIR),
+        None => {
+            eprintln!("Error: Could not determine home directory. Set the OPENSRC_HOME environment variable.");
+            std::process::exit(1);
+        }
+    }
 }
 
 pub fn get_repos_dir() -> PathBuf {
@@ -52,14 +63,12 @@ pub fn get_repos_dir() -> PathBuf {
 
 /// Extract host/owner/repo from a git URL.
 pub fn parse_repo_url(url: &str) -> Option<(String, String, String)> {
-    let re_https = regex::Regex::new(r"https?://([^/]+)/([^/]+)/([^/]+)").unwrap();
-    if let Some(caps) = re_https.captures(url) {
+    if let Some(caps) = RE_HTTPS_REPO.captures(url) {
         let repo = caps[3].trim_end_matches(".git").to_string();
         return Some((caps[1].to_string(), caps[2].to_string(), repo));
     }
 
-    let re_ssh = regex::Regex::new(r"git@([^:]+):([^/]+)/(.+)").unwrap();
-    if let Some(caps) = re_ssh.captures(url) {
+    if let Some(caps) = RE_SSH_REPO.captures(url) {
         let repo = caps[3].trim_end_matches(".git").to_string();
         return Some((caps[1].to_string(), caps[2].to_string(), repo));
     }
@@ -155,13 +164,12 @@ pub fn get_repo_info(display_name: &str) -> Option<RepoEntry> {
     repos.into_iter().find(|r| r.name == display_name)
 }
 
-fn extract_repo_base_path(full_path: &str) -> &str {
+pub fn extract_repo_base_path(full_path: &str) -> String {
     let parts: Vec<&str> = full_path.split('/').collect();
     if parts.len() >= 4 && parts[0] == "repos" {
-        let end = parts[..4].iter().map(|s| s.len()).sum::<usize>() + 3;
-        &full_path[..end]
+        parts[..4].join("/")
     } else {
-        full_path
+        full_path.to_string()
     }
 }
 
@@ -181,7 +189,7 @@ pub fn remove_package_source(
     let pkg_repo_base = extract_repo_base_path(&pkg.path);
 
     let others_use_same = packages.iter().any(|p| {
-        extract_repo_base_path(&p.path) == pkg_repo_base
+        extract_repo_base_path(&p.path) == *pkg_repo_base
             && !(p.name == name && p.registry == registry)
     });
 
@@ -300,9 +308,9 @@ mod tests {
     fn test_extract_repo_base_path() {
         assert_eq!(
             extract_repo_base_path("repos/github.com/owner/repo/1.0.0/packages/sub"),
-            "repos/github.com/owner/repo"
+            "repos/github.com/owner/repo".to_string()
         );
-        assert_eq!(extract_repo_base_path("other"), "other");
+        assert_eq!(extract_repo_base_path("other"), "other".to_string());
     }
 
     #[test]

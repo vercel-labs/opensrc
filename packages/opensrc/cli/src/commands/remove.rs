@@ -7,6 +7,7 @@ use crate::lib::registries::{detect_registry, Registry};
 pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut removed = 0u32;
     let mut not_found = 0u32;
+    let mut had_errors = false;
 
     let mut removed_packages: Vec<(String, Registry)> = Vec::new();
     let mut removed_repos: Vec<String> = Vec::new();
@@ -33,6 +34,7 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Err(e) => {
                     println!("  ✗ Error removing {item}: {e}");
+                    had_errors = true;
                 }
             }
         } else {
@@ -73,9 +75,11 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Ok((false, _)) => {
                     println!("  ✗ Failed to remove {clean}");
+                    had_errors = true;
                 }
                 Err(e) => {
                     println!("  ✗ Error removing {clean}: {e}");
+                    had_errors = true;
                 }
             }
         }
@@ -106,6 +110,10 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             .collect();
 
         write_sources(remaining_packages, remaining_repos)?;
+    }
+
+    if had_errors {
+        return Err("Some items could not be removed".into());
     }
 
     Ok(())

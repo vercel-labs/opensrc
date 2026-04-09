@@ -282,6 +282,13 @@ jobs:
           fi
           echo "Found $BINARY_COUNT binaries"
 
+      - name: Generate checksums
+        run: |
+          cd bin
+          sha256sum opensrc-* > CHECKSUMS.txt
+          echo "Generated checksums:"
+          cat CHECKSUMS.txt
+
       - name: Extract changelog entry
         run: |
           VERSION="${{ needs.check-release.outputs.version }}"
@@ -301,13 +308,13 @@ jobs:
 
           if gh release view "$TAG" &>/dev/null; then
             echo "Release $TAG already exists, uploading assets..."
-            gh release upload "$TAG" bin/opensrc-* --clobber
+            gh release upload "$TAG" bin/opensrc-* bin/CHECKSUMS.txt --clobber
           else
             echo "Creating release $TAG..."
             gh release create "$TAG" \
               --title "$TAG" \
               --notes-file /tmp/release-notes.md \
-              bin/opensrc-*
+              bin/opensrc-* bin/CHECKSUMS.txt
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

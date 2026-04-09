@@ -1,6 +1,12 @@
-use super::{Registry, ResolvedPackage};
-use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+use serde::Deserialize;
+
+use super::{Registry, ResolvedPackage};
+
+static RE_SCOPED_PKG: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^(@[^/]+/[^@]+)(?:@(.+))?$").unwrap());
 
 const NPM_REGISTRY: &str = "https://registry.npmjs.org";
 
@@ -24,10 +30,8 @@ struct NpmResponse {
 }
 
 pub fn parse_npm_spec(spec: &str) -> (String, Option<String>) {
-    // Scoped packages: @scope/pkg@version
     if spec.starts_with('@') {
-        let re = regex::Regex::new(r"^(@[^/]+/[^@]+)(?:@(.+))?$").unwrap();
-        if let Some(caps) = re.captures(spec) {
+        if let Some(caps) = RE_SCOPED_PKG.captures(spec) {
             let name = caps[1].to_string();
             let version = caps.get(2).map(|m| m.as_str().to_string());
             return (name, version);
@@ -55,7 +59,7 @@ fn npm_registry_url(name: &str) -> String {
 fn fetch_npm_info(name: &str) -> Result<NpmResponse, Box<dyn std::error::Error>> {
     let url = npm_registry_url(name);
 
-    let client = reqwest::blocking::Client::new();
+    let client = super::http_client();
     let resp = client
         .get(&url)
         .header("Accept", "application/json")

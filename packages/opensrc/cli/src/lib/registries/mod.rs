@@ -125,6 +125,15 @@ pub(crate) fn normalize_repo_url(url: &str) -> String {
         .to_string()
 }
 
+pub(crate) fn http_client() -> reqwest::blocking::Client {
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .user_agent("opensrc-cli (https://github.com/vercel-labs/opensrc)")
+        .build()
+        .expect("failed to build HTTP client")
+}
+
 pub fn detect_input_type(spec: &str) -> &'static str {
     let trimmed = spec.trim();
     let lower = trimmed.to_lowercase();

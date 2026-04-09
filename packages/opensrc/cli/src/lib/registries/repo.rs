@@ -1,4 +1,14 @@
+use std::sync::LazyLock;
+
 use serde::Deserialize;
+
+static RE_URL: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"^https?://(github\.com|gitlab\.com|bitbucket\.org)/").unwrap()
+});
+static RE_OWNER: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$").unwrap());
+static RE_REPO: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[a-zA-Z0-9._-]+$").unwrap());
 
 const SUPPORTED_HOSTS: &[&str] = &["github.com", "gitlab.com", "bitbucket.org"];
 const DEFAULT_HOST: &str = "github.com";
@@ -116,8 +126,7 @@ pub fn is_repo_spec(spec: &str) -> bool {
         return true;
     }
 
-    let re = regex::Regex::new(r"^https?://(github\.com|gitlab\.com|bitbucket\.org)/").unwrap();
-    if re.is_match(trimmed) {
+    if RE_URL.is_match(trimmed) {
         return true;
     }
 
@@ -141,13 +150,7 @@ pub fn is_repo_spec(spec: &str) -> bool {
             .split('#')
             .next()
             .unwrap_or("");
-        let valid_owner = regex::Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
-            .unwrap()
-            .is_match(parts[0]);
-        let valid_repo = regex::Regex::new(r"^[a-zA-Z0-9._-]+$")
-            .unwrap()
-            .is_match(repo_part);
-        return valid_owner && valid_repo;
+        return RE_OWNER.is_match(parts[0]) && RE_REPO.is_match(repo_part);
     }
 
     false
@@ -178,11 +181,10 @@ pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error:
 fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
     let url = format!("https://api.github.com/repos/{}/{}", spec.owner, spec.repo);
 
-    let client = reqwest::blocking::Client::new();
+    let client = super::http_client();
     let resp = client
         .get(&url)
         .header("Accept", "application/vnd.github.v3+json")
-        .header("User-Agent", "opensrc-cli")
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
@@ -214,11 +216,8 @@ fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
     let encoded = urlencoding::encode(&project_path);
     let url = format!("https://gitlab.com/api/v4/projects/{encoded}");
 
-    let client = reqwest::blocking::Client::new();
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "opensrc-cli")
-        .send()?;
+    let client = super::http_client();
+    let resp = client.get(&url).send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(format!(

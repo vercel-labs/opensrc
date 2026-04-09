@@ -38,14 +38,10 @@ pub fn parse_crates_spec(spec: &str) -> (String, Option<String>) {
 fn fetch_crate_info(name: &str) -> Result<CrateResponse, Box<dyn std::error::Error>> {
     let url = format!("{CRATES_API}/crates/{name}");
 
-    let client = reqwest::blocking::Client::new();
+    let client = super::http_client();
     let resp = client
         .get(&url)
         .header("Accept", "application/json")
-        .header(
-            "User-Agent",
-            "opensrc-cli (https://github.com/vercel-labs/opensrc)",
-        )
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
@@ -61,14 +57,10 @@ fn fetch_crate_info(name: &str) -> Result<CrateResponse, Box<dyn std::error::Err
 fn verify_crate_version(name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{CRATES_API}/crates/{name}/{version}");
 
-    let client = reqwest::blocking::Client::new();
+    let client = super::http_client();
     let resp = client
         .get(&url)
         .header("Accept", "application/json")
-        .header(
-            "User-Agent",
-            "opensrc-cli (https://github.com/vercel-labs/opensrc)",
-        )
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {

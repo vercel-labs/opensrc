@@ -1,6 +1,12 @@
-use super::{Registry, ResolvedPackage};
-use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+use serde::Deserialize;
+
+use super::{Registry, ResolvedPackage};
+
+static RE_PYPI_VERSION: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^([^=<>!~]+)==(.+)$").unwrap());
 
 const PYPI_API: &str = "https://pypi.org/pypi";
 
@@ -17,9 +23,7 @@ struct PyPIResponse {
 }
 
 pub fn parse_pypi_spec(spec: &str) -> (String, Option<String>) {
-    // requests==2.31.0
-    let re = regex::Regex::new(r"^([^=<>!~]+)==(.+)$").unwrap();
-    if let Some(caps) = re.captures(spec) {
+    if let Some(caps) = RE_PYPI_VERSION.captures(spec) {
         return (caps[1].trim().to_string(), Some(caps[2].trim().to_string()));
     }
 
@@ -45,7 +49,7 @@ fn fetch_pypi_info(
         None => format!("{PYPI_API}/{name}/json"),
     };
 
-    let client = reqwest::blocking::Client::new();
+    let client = super::http_client();
     let resp = client
         .get(&url)
         .header("Accept", "application/json")

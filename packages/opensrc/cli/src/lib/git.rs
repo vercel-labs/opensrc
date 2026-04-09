@@ -21,27 +21,36 @@ struct CloneResult {
     error: Option<String>,
 }
 
+fn git_clone_output(args: &[&str]) -> std::io::Result<std::process::Output> {
+    Command::new("git")
+        .args(args)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .output()
+}
+
+fn stderr_string(output: &std::process::Output) -> String {
+    String::from_utf8_lossy(&output.stderr).trim().to_string()
+}
+
 fn clone_at_tag(repo_url: &str, target: &Path, version: &str) -> CloneResult {
     let tags = [format!("v{version}"), version.to_string()];
+    let target_str = target.to_string_lossy();
 
     for tag in &tags {
-        let status = Command::new("git")
-            .args([
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                tag,
-                "--single-branch",
-                repo_url,
-                &target.to_string_lossy(),
-            ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+        let output = git_clone_output(&[
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            tag,
+            "--single-branch",
+            repo_url,
+            &target_str,
+        ]);
 
-        match status {
-            Ok(s) if s.success() => {
+        match output {
+            Ok(o) if o.status.success() => {
                 return CloneResult {
                     success: true,
                     error: None,
@@ -54,45 +63,50 @@ fn clone_at_tag(repo_url: &str, target: &Path, version: &str) -> CloneResult {
         }
     }
 
-    // Fallback: clone default branch
-    let status = Command::new("git")
-        .args(["clone", "--depth", "1", repo_url, &target.to_string_lossy()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+    let output = git_clone_output(&["clone", "--depth", "1", repo_url, &target_str]);
 
-    match status {
-        Ok(s) if s.success() => CloneResult {
+    match output {
+        Ok(o) if o.status.success() => CloneResult {
             success: true,
             error: Some(format!(
                 "Could not find tag for version {version}, cloned default branch instead"
             )),
         },
-        _ => CloneResult {
+        Ok(o) => {
+            let stderr = stderr_string(&o);
+            let msg = if stderr.is_empty() {
+                "Failed to clone repository".to_string()
+            } else {
+                format!("Failed to clone repository: {stderr}")
+            };
+            CloneResult {
+                success: false,
+                error: Some(msg),
+            }
+        }
+        Err(e) => CloneResult {
             success: false,
-            error: Some("Failed to clone repository".into()),
+            error: Some(format!("Failed to run git: {e}")),
         },
     }
 }
 
 fn clone_at_ref(repo_url: &str, target: &Path, git_ref: &str) -> CloneResult {
-    let status = Command::new("git")
-        .args([
-            "clone",
-            "--depth",
-            "1",
-            "--branch",
-            git_ref,
-            "--single-branch",
-            repo_url,
-            &target.to_string_lossy(),
-        ])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+    let target_str = target.to_string_lossy();
 
-    if let Ok(s) = status {
-        if s.success() {
+    let output = git_clone_output(&[
+        "clone",
+        "--depth",
+        "1",
+        "--branch",
+        git_ref,
+        "--single-branch",
+        repo_url,
+        &target_str,
+    ]);
+
+    if let Ok(o) = output {
+        if o.status.success() {
             return CloneResult {
                 success: true,
                 error: None,
@@ -102,23 +116,30 @@ fn clone_at_ref(repo_url: &str, target: &Path, git_ref: &str) -> CloneResult {
 
     let _ = fs::remove_dir_all(target);
 
-    // Fallback: clone default branch
-    let status = Command::new("git")
-        .args(["clone", "--depth", "1", repo_url, &target.to_string_lossy()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+    let output = git_clone_output(&["clone", "--depth", "1", repo_url, &target_str]);
 
-    match status {
-        Ok(s) if s.success() => CloneResult {
+    match output {
+        Ok(o) if o.status.success() => CloneResult {
             success: true,
             error: Some(format!(
                 "Could not find ref \"{git_ref}\", cloned default branch instead"
             )),
         },
-        _ => CloneResult {
+        Ok(o) => {
+            let stderr = stderr_string(&o);
+            let msg = if stderr.is_empty() {
+                "Failed to clone repository".to_string()
+            } else {
+                format!("Failed to clone repository: {stderr}")
+            };
+            CloneResult {
+                success: false,
+                error: Some(msg),
+            }
+        }
+        Err(e) => CloneResult {
             success: false,
-            error: Some("Failed to clone repository".into()),
+            error: Some(format!("Failed to run git: {e}")),
         },
     }
 }

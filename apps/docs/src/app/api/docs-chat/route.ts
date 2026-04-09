@@ -47,9 +47,13 @@ async function loadDocsFiles(): Promise<Record<string, string>> {
     }),
   );
 
-  for (const result of results) {
+  for (const [i, result] of results.entries()) {
     if (result.status === "fulfilled") {
       files[result.value.fileName] = result.value.md;
+    } else {
+      console.warn(
+        `Failed to load docs page ${allDocsPages[i].href}: ${result.reason}`,
+      );
     }
   }
 
@@ -83,6 +87,18 @@ export async function POST(req: Request) {
   ]);
 
   if (!minuteResult.success || !dailyResult.success) {
+    const kvConfigured = !!(
+      process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
+    );
+    if (!kvConfigured) {
+      return new Response(
+        JSON.stringify({
+          error: "Service unavailable",
+          message: "Chat is not available.",
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+    }
     const isMinuteLimit = !minuteResult.success;
     return new Response(
       JSON.stringify({
@@ -98,7 +114,29 @@ export async function POST(req: Request) {
     );
   }
 
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  let messages: UIMessage[];
+  try {
+    const body = await req.json();
+    messages = body.messages;
+  } catch {
+    return new Response(
+      JSON.stringify({
+        error: "Bad request",
+        message: "Invalid JSON body.",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  if (!Array.isArray(messages)) {
+    return new Response(
+      JSON.stringify({
+        error: "Bad request",
+        message: "messages must be an array.",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
 
   const docsFiles = await loadDocsFiles();
   const {

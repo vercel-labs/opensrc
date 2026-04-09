@@ -15,8 +15,8 @@ function getRedis(): Redis | null {
   return new Redis({ url, token });
 }
 
-const noopRateLimiter = {
-  limit: async () => ({ success: true, limit: 0, remaining: 0, reset: 0 }),
+const deniedRateLimiter = {
+  limit: async () => ({ success: false, limit: 0, remaining: 0, reset: 0 }),
 };
 
 const MINUTE_LIMIT = Number(process.env.RATE_LIMIT_PER_MINUTE) || 10;
@@ -26,7 +26,7 @@ export const minuteRateLimit = {
   limit: async (identifier: string) => {
     if (!_minuteRateLimit) {
       const redis = getRedis();
-      if (!redis) return noopRateLimiter.limit();
+      if (!redis) return deniedRateLimiter.limit();
       _minuteRateLimit = new Ratelimit({
         redis,
         limiter: Ratelimit.slidingWindow(MINUTE_LIMIT, "1 m"),
@@ -41,7 +41,7 @@ export const dailyRateLimit = {
   limit: async (identifier: string) => {
     if (!_dailyRateLimit) {
       const redis = getRedis();
-      if (!redis) return noopRateLimiter.limit();
+      if (!redis) return deniedRateLimiter.limit();
       _dailyRateLimit = new Ratelimit({
         redis,
         limiter: Ratelimit.fixedWindow(DAILY_LIMIT, "1 d"),

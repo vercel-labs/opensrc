@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, writeFileSync, symlinkSync, lstatSync } from 'fs';
+import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, writeFileSync, symlinkSync, lstatSync, readFileSync } from 'fs';
+import { createHash } from 'crypto';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { platform, arch } from 'os';
@@ -34,6 +35,7 @@ const version = packageJson.version;
 
 const GITHUB_REPO = 'vercel-labs/opensrc';
 const DOWNLOAD_URL = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${binaryName}`;
+const CHECKSUMS_URL = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/CHECKSUMS.txt`;
 
 async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
@@ -76,6 +78,61 @@ async function downloadFile(url, dest) {
   });
 }
 
+async function downloadText(url) {
+  return new Promise((resolve, reject) => {
+    const request = (url, redirectCount = 0) => {
+      if (redirectCount > 5) {
+        reject(new Error('Too many redirects'));
+        return;
+      }
+      get(url, (response) => {
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          const location = response.headers.location;
+          if (!location) {
+            reject(new Error('Redirect with no Location header'));
+            return;
+          }
+          request(new URL(location, url).href, redirectCount + 1);
+          return;
+        }
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}`));
+          return;
+        }
+        let data = '';
+        response.on('data', (chunk) => { data += chunk; });
+        response.on('end', () => resolve(data));
+      }).on('error', reject);
+    };
+    request(url);
+  });
+}
+
+async function verifyChecksum(filePath, fileName) {
+  try {
+    const checksums = await downloadText(CHECKSUMS_URL);
+    const line = checksums.split('\n').find((l) => l.includes(fileName));
+    if (!line) {
+      console.log('⚠ No checksum entry found for this binary, skipping verification');
+      return true;
+    }
+    const expectedHash = line.split(/\s+/)[0];
+    const fileBuffer = readFileSync(filePath);
+    const actualHash = createHash('sha256').update(fileBuffer).digest('hex');
+    if (actualHash !== expectedHash) {
+      console.log(`✗ Checksum mismatch!`);
+      console.log(`  Expected: ${expectedHash}`);
+      console.log(`  Actual:   ${actualHash}`);
+      return false;
+    }
+    console.log('✓ Checksum verified');
+    return true;
+  } catch (err) {
+    console.log(`⚠ Could not verify checksum: ${err.message}`);
+    return true;
+  }
+}
+
 async function main() {
   if (existsSync(binaryPath)) {
     if (platform() !== 'win32') {
@@ -95,6 +152,19 @@ async function main() {
 
   try {
     await downloadFile(DOWNLOAD_URL, binaryPath);
+
+    const checksumValid = await verifyChecksum(binaryPath, binaryName);
+    if (!checksumValid) {
+      unlinkSync(binaryPath);
+      console.log('Binary removed due to checksum mismatch.');
+      console.log('This may indicate a corrupted download or a supply-chain issue.');
+      console.log('');
+      console.log('To build the native binary locally:');
+      console.log('  1. Install Rust: https://rustup.rs');
+      console.log('  2. Run: npm run build:native');
+      await fixGlobalInstallBin();
+      return;
+    }
 
     if (platform() !== 'win32') {
       chmodSync(binaryPath, 0o755);
