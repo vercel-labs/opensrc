@@ -245,4 +245,9 @@ mod tests {
             "https://github.com/owner/repo"
         );
     }
+
+    #[test]
+    fn test_detect_input_type_repo_subpath() {
+        assert_eq!(detect_input_type("vercel/ai/packages/ai"), "repo");
+    }
 }

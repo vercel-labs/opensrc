@@ -19,6 +19,7 @@ pub struct RepoSpec {
     pub owner: String,
     pub repo: String,
     pub git_ref: Option<String>,
+    pub subpath: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub struct ResolvedRepo {
     pub git_ref: String,
     pub repo_url: String,
     pub display_name: String,
+    pub subpath: Option<String>,
 }
 
 pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
@@ -68,8 +70,15 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
             repo = repo[..repo.len() - 4].to_string();
         }
 
+        let mut subpath: Option<String> = None;
+
         if path_parts.len() >= 4 && (path_parts[2] == "tree" || path_parts[2] == "blob") {
             git_ref = Some(path_parts[3].to_string());
+            if path_parts.len() > 4 {
+                subpath = Some(path_parts[4..].join("/"));
+            }
+        } else if path_parts.len() > 2 {
+            subpath = Some(path_parts[2..].join("/"));
         }
 
         return Some(RepoSpec {
@@ -77,6 +86,7 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
             owner,
             repo,
             git_ref,
+            subpath,
         });
     } else if SUPPORTED_HOSTS
         .iter()
@@ -86,8 +96,20 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
             host = remaining[..idx].to_string();
             remaining = remaining[idx + 1..].to_string();
         }
-    } else if remaining.starts_with('@') || remaining.split('/').count() != 2 {
+    } else if remaining.starts_with('@') {
         return None;
+    } else {
+        let path_before_ref = remaining
+            .split('@')
+            .next()
+            .unwrap_or("")
+            .split('#')
+            .next()
+            .unwrap_or("");
+        let seg_count = path_before_ref.split('/').filter(|s| !s.is_empty()).count();
+        if seg_count < 2 {
+            return None;
+        }
     }
 
     // Extract ref from @ or #
@@ -103,16 +125,23 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
         }
     }
 
-    let parts: Vec<&str> = remaining.split('/').collect();
-    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
+    let parts: Vec<&str> = remaining.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.len() < 2 || parts[0].is_empty() || parts[1].is_empty() {
         return None;
     }
+
+    let subpath = if parts.len() > 2 {
+        Some(parts[2..].join("/"))
+    } else {
+        None
+    };
 
     Some(RepoSpec {
         host,
         owner: parts[0].to_string(),
         repo: parts[1].to_string(),
         git_ref,
+        subpath,
     })
 }
 
@@ -141,15 +170,16 @@ pub fn is_repo_spec(spec: &str) -> bool {
         return false;
     }
 
-    let parts: Vec<&str> = trimmed.split('/').collect();
-    if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
-        let repo_part = parts[1]
-            .split('@')
-            .next()
-            .unwrap_or("")
-            .split('#')
-            .next()
-            .unwrap_or("");
+    let path_part = trimmed
+        .split('@')
+        .next()
+        .unwrap_or("")
+        .split('#')
+        .next()
+        .unwrap_or("");
+    let parts: Vec<&str> = path_part.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+        let repo_part = parts[1];
         return RE_OWNER.is_match(parts[0]) && RE_REPO.is_match(repo_part);
     }
 
@@ -174,6 +204,7 @@ pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error:
             git_ref: spec.git_ref.clone().unwrap_or_else(|| "main".to_string()),
             repo_url: format!("https://{}/{}/{}", spec.host, spec.owner, spec.repo),
             display_name: format!("{}/{}/{}", spec.host, spec.owner, spec.repo),
+            subpath: spec.subpath.clone(),
         }),
     }
 }
@@ -218,6 +249,7 @@ fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
         git_ref: resolved_ref,
         repo_url: format!("https://github.com/{}/{}", spec.owner, spec.repo),
         display_name: format!("{}/{}/{}", spec.host, spec.owner, spec.repo),
+        subpath: spec.subpath.clone(),
     })
 }
 
@@ -261,6 +293,7 @@ fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
         git_ref: resolved_ref,
         repo_url: format!("https://gitlab.com/{}/{}", spec.owner, spec.repo),
         display_name: format!("{}/{}/{}", spec.host, spec.owner, spec.repo),
+        subpath: spec.subpath.clone(),
     })
 }
 
@@ -275,6 +308,10 @@ mod tests {
         assert_eq!(spec.owner, "vercel");
         assert_eq!(spec.repo, "next.js");
         assert_eq!(spec.git_ref, None);
+
+        let monorepo = parse_repo_spec("vercel/ai/packages/ai").unwrap();
+        assert_eq!(monorepo.repo, "ai");
+        assert_eq!(monorepo.subpath.as_deref(), Some("packages/ai"));
     }
 
     #[test]
@@ -283,6 +320,10 @@ mod tests {
         assert_eq!(spec.owner, "vercel");
         assert_eq!(spec.repo, "next.js");
         assert_eq!(spec.git_ref, Some("canary".into()));
+
+        let sub = parse_repo_spec("vercel/ai/packages/ai@main").unwrap();
+        assert_eq!(sub.git_ref, Some("main".into()));
+        assert_eq!(sub.subpath.as_deref(), Some("packages/ai"));
     }
 
     #[test]
@@ -290,6 +331,12 @@ mod tests {
         let spec = parse_repo_spec("github:vercel/next.js").unwrap();
         assert_eq!(spec.host, "github.com");
         assert_eq!(spec.owner, "vercel");
+
+        let sub = parse_repo_spec("github:vercel/ai/packages/ai").unwrap();
+        assert_eq!(sub.subpath.as_deref(), Some("packages/ai"));
+
+        let host = parse_repo_spec("github.com/vercel/ai/packages/ai").unwrap();
+        assert_eq!(host.subpath.as_deref(), Some("packages/ai"));
     }
 
     #[test]
@@ -299,6 +346,14 @@ mod tests {
         assert_eq!(spec.owner, "vercel");
         assert_eq!(spec.repo, "next.js");
         assert_eq!(spec.git_ref, Some("canary".into()));
+
+        let tree = parse_repo_spec("https://github.com/vercel/ai/tree/main/packages/ai").unwrap();
+        assert_eq!(tree.git_ref, Some("main".into()));
+        assert_eq!(tree.subpath.as_deref(), Some("packages/ai"));
+
+        let plain = parse_repo_spec("https://github.com/vercel/ai/packages/ai").unwrap();
+        assert_eq!(plain.git_ref, None);
+        assert_eq!(plain.subpath.as_deref(), Some("packages/ai"));
     }
 
     #[test]
@@ -306,6 +361,7 @@ mod tests {
         assert!(is_repo_spec("vercel/next.js"));
         assert!(is_repo_spec("github:vercel/next.js"));
         assert!(is_repo_spec("https://github.com/vercel/next.js"));
+        assert!(is_repo_spec("vercel/ai/packages/ai"));
         assert!(!is_repo_spec("@babel/core"));
         assert!(!is_repo_spec("zod"));
     }

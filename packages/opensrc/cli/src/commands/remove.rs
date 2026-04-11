@@ -1,5 +1,6 @@
 use crate::core::cache::{
-    get_package_info, list_sources, remove_package_source, remove_repo_source, write_sources,
+    get_package_info, get_repo_info, list_sources, remove_package_source, remove_repo_source,
+    write_sources,
 };
 use crate::core::registries::repo::{is_repo_spec, parse_repo_spec};
 use crate::core::registries::{detect_registry, Registry};
@@ -16,20 +17,36 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         let is_repo = is_repo_spec(item) || (item.contains('/') && !item.contains(':'));
 
         if is_repo {
-            let display_name = match parse_repo_spec(item) {
-                Some(spec) => format!("{}/{}/{}", spec.host, spec.owner, spec.repo),
+            let parsed = match parse_repo_spec(item) {
+                Some(spec) => spec,
                 None => {
                     println!("  ✗ Could not parse repo spec: {item}");
                     had_errors = true;
                     continue;
                 }
             };
+            let display_name = format!("{}/{}/{}", parsed.host, parsed.owner, parsed.repo);
+            let sources_key = parsed
+                .subpath
+                .as_ref()
+                .map(|s| format!("{display_name}/{s}"))
+                .unwrap_or_else(|| display_name.clone());
 
-            match remove_repo_source(&display_name, None) {
+            let removal = if let Some(entry) = get_repo_info(&sources_key) {
+                remove_repo_source(&display_name, Some(&entry.version))
+            } else {
+                remove_repo_source(&display_name, None)
+            };
+
+            match removal {
                 Ok(true) => {
-                    println!("  ✓ Removed {display_name}");
+                    if let Some(sp) = &parsed.subpath {
+                        println!("  ✓ Removed {display_name}/{sp}");
+                    } else {
+                        println!("  ✓ Removed {display_name}");
+                    }
                     removed += 1;
-                    removed_repos.push(display_name);
+                    removed_repos.push(sources_key);
                 }
                 Ok(false) => {
                     println!("  ⚠ {item} not found");
