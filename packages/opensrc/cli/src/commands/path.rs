@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use crate::core::cache::{
-    get_absolute_path, get_package_info, get_repo_info, list_sources, now_iso, write_sources,
-    PackageEntry, RepoEntry,
+    get_absolute_path, get_package_info, get_repo_info, list_sources, now_iso,
+    upsert_package_entry, write_sources, PackageEntry, RepoEntry,
 };
 use crate::core::git::{fetch_repo_source, fetch_source};
 use crate::core::registries::repo::{parse_repo_spec, resolve_repo};
@@ -17,35 +17,29 @@ fn log(verbose: bool, msg: &str) {
     }
 }
 
+fn resolve_requested_package_version(parsed: &PackageSpec, cwd: &str) -> Option<String> {
+    if parsed.version.is_some() {
+        return parsed.version.clone();
+    }
+
+    if parsed.registry == Registry::Npm {
+        return detect_installed_version(&parsed.name, &PathBuf::from(cwd));
+    }
+
+    None
+}
+
 fn handle_package(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let parsed = parse_package_spec(spec);
     let registry = parsed.registry;
     let name = parsed.name.clone();
-    let mut version = parsed.version.clone();
+    let version = resolve_requested_package_version(&parsed, cwd);
 
-    // Check cache if version is specified
-    if let Some(ref v) = version {
-        if let Some(existing) = get_package_info(&name, registry) {
-            if existing.version == *v {
-                let abs = get_absolute_path(&existing.path);
-                println!("{}", abs.display());
-                return Ok(());
-            }
-        }
-    }
-
-    // Detect installed version for npm
-    if version.is_none() && registry == Registry::Npm {
-        let detected = detect_installed_version(&name, &PathBuf::from(cwd));
-        if let Some(v) = detected {
-            version = Some(v.clone());
-            if let Some(existing) = get_package_info(&name, registry) {
-                if existing.version == v {
-                    let abs = get_absolute_path(&existing.path);
-                    println!("{}", abs.display());
-                    return Ok(());
-                }
-            }
+    if let Some(ref expected_version) = version {
+        if let Some(existing) = get_package_info(&name, registry, Some(expected_version)) {
+            let abs = get_absolute_path(&existing.path);
+            println!("{}", abs.display());
+            return Ok(());
         }
     }
 
@@ -81,14 +75,7 @@ fn handle_package(spec: &str, cwd: &str, verbose: bool) -> Result<(), Box<dyn st
         path: result.path.clone(),
         fetched_at: now_iso(),
     };
-    if let Some(idx) = packages
-        .iter()
-        .position(|p| p.name == entry.name && p.registry == entry.registry)
-    {
-        packages[idx] = entry;
-    } else {
-        packages.push(entry);
-    }
+    upsert_package_entry(&mut packages, entry);
     write_sources(packages, repos)?;
 
     let abs = get_absolute_path(&result.path);
