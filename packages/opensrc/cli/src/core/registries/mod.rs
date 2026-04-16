@@ -142,6 +142,12 @@ pub(crate) fn gitlab_token() -> Option<String> {
     std::env::var("GITLAB_TOKEN").ok().filter(|t| !t.is_empty())
 }
 
+pub(crate) fn bitbucket_token() -> Option<String> {
+    std::env::var("BITBUCKET_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+}
+
 /// Rewrites an HTTPS clone URL to embed auth credentials when a token is available.
 pub fn authenticated_clone_url(url: &str) -> String {
     if let Some(token) = github_token() {
@@ -158,6 +164,15 @@ pub fn authenticated_clone_url(url: &str) -> String {
             return url.replacen(
                 "https://gitlab.com",
                 &format!("https://oauth2:{token}@gitlab.com"),
+                1,
+            );
+        }
+    }
+    if let Some(token) = bitbucket_token() {
+        if url.contains("bitbucket.org") {
+            return url.replacen(
+                "https://bitbucket.org",
+                &format!("https://x-token-auth:{token}@bitbucket.org"),
                 1,
             );
         }

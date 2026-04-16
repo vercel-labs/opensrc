@@ -1,0 +1,42 @@
+# Authentication
+
+opensrc reads three environment variables to authenticate against private repositories and registry APIs. Set only the ones you need — nothing is persisted, tokens are read from the environment on each run.
+
+Tokens are used for both resolving a repository's default branch (via each host's API) and for the underlying `git clone` over HTTPS.
+
+## GitHub
+
+Set `GITHUB_TOKEN` to a personal access token:
+
+```bash
+export GITHUB_TOKEN=ghp_your_token_here
+opensrc path vercel/private-repo
+```
+
+A fine-grained PAT with **read-only "Contents"** access to the repositories you need, or a classic PAT with the `repo` scope, is sufficient. Setting the token also raises the anonymous GitHub API rate limit from 60 requests/hour to 5,000 requests/hour.
+
+## GitLab
+
+Set `GITLAB_TOKEN` to a personal access token:
+
+```bash
+export GITLAB_TOKEN=glpat_your_token_here
+opensrc path gitlab:group/private-project
+```
+
+The token needs the `read_api` and `read_repository` scopes.
+
+## Bitbucket
+
+Set `BITBUCKET_TOKEN` to a workspace, project, or repository access token:
+
+```bash
+export BITBUCKET_TOKEN=your_access_token
+opensrc path bitbucket:workspace/private-repo
+```
+
+The token needs read access to the repository. Bitbucket Cloud is phasing out app passwords — prefer access tokens for new setups.
+
+## CI and shells
+
+In CI, set the token as a masked secret environment variable. In an interactive shell, export it from your shell profile or a local `.env` that you source on demand. opensrc never writes tokens to disk.
