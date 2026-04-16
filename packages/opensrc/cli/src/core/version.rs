@@ -64,12 +64,24 @@ fn version_from_yarn_lock(package_name: &str, cwd: &Path) -> Option<String> {
 fn version_from_package_json(package_name: &str, cwd: &Path) -> Option<String> {
     let path = cwd.join("package.json");
     let content = fs::read_to_string(path).ok()?;
-    let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+    parse_package_json_version(&content, package_name)
+}
+
+/// Extract `package_name`'s version from a parsed package.json.
+///
+/// Skips entries that aren't real registry versions (e.g. `workspace:*`,
+/// `link:../pkg`, `file:./tarball.tgz`, `git+https://...`) so the caller
+/// isn't handed a string that can't be resolved against npm.
+fn parse_package_json_version(content: &str, package_name: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(content).ok()?;
 
     for field in &["dependencies", "devDependencies", "peerDependencies"] {
         if let Some(deps) = parsed.get(field) {
             if let Some(v) = deps.get(package_name).and_then(|v| v.as_str()) {
-                return Some(strip_version_prefix(v));
+                let stripped = strip_version_prefix(v);
+                if is_registry_version(&stripped) {
+                    return Some(stripped);
+                }
             }
         }
     }
@@ -135,6 +147,22 @@ fn split_pkg_spec(spec: &str) -> Option<(&str, &str)> {
         spec.find('@')?
     };
     Some((&spec[..at_pos], &spec[at_pos + 1..]))
+}
+
+/// Return `true` if `v` looks like a version we can resolve against a public
+/// registry. Lockfiles (and package.json) can legitimately contain
+/// workspace/link/file/git/URL protocol strings — for example a pnpm importer
+/// may pin a sibling workspace package with `version: link:../pkg`, and a
+/// yarn Berry workspace root has `version: 0.0.0-use.local`. Returning any
+/// of those from `detect_installed_version` would make the caller try to
+/// fetch `<pkg>@link:../pkg` from npm, which fails with a confusing error.
+///
+/// Real npm versions never contain `:`, so treating a colon as disqualifying
+/// catches every known protocol prefix (`link:`, `file:`, `workspace:`,
+/// `portal:`, `git:`, `git+ssh://`, `github:`, `http:`, `https:`, `npm:`,
+/// etc.) without having to enumerate them.
+fn is_registry_version(v: &str) -> bool {
+    !v.is_empty() && v != "0.0.0-use.local" && !v.contains(':')
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +332,10 @@ fn parse_pnpm_lock(text: &str, pkg: &str) -> Option<String> {
                         // value so the key matches `snapshots:` entries.
                         graph.roots.push(format!("{dep_name}@{cleaned}"));
 
-                        if dep_name == pkg {
+                        // Filter at capture so workspace/link/file versions
+                        // in one importer don't block a real version in a
+                        // later importer.
+                        if dep_name == pkg && is_registry_version(stripped) {
                             let captured = Some(stripped.to_string());
                             match origin {
                                 Origin::Importer if importer_match.is_none() => {
@@ -327,7 +358,7 @@ fn parse_pnpm_lock(text: &str, pkg: &str) -> Option<String> {
                     let stripped = strip_peer_suffix(cleaned);
                     graph.roots.push(format!("{pkg_name}@{cleaned}"));
 
-                    if pkg_name == pkg {
+                    if pkg_name == pkg && is_registry_version(stripped) {
                         let captured = Some(stripped.to_string());
                         match origin {
                             Origin::Importer if importer_match.is_none() => {
@@ -359,7 +390,10 @@ fn parse_pnpm_lock(text: &str, pkg: &str) -> Option<String> {
                                 deps: Vec::new(),
                             });
 
-                        if name == pkg && packages_fallback.is_none() {
+                        if name == pkg
+                            && packages_fallback.is_none()
+                            && is_registry_version(&version)
+                        {
                             packages_fallback = Some(version);
                         }
 
@@ -423,7 +457,7 @@ fn resolve_transitive(graph: &PnpmGraph, pkg: &str) -> Option<String> {
         let Some(node) = graph.nodes.get(key) else {
             continue;
         };
-        if node.name == pkg {
+        if node.name == pkg && is_registry_version(&node.version) {
             return Some(node.version.clone());
         }
         for dep in &node.deps {
@@ -514,7 +548,11 @@ fn parse_yarn_lock(text: &str, pkg: &str) -> Option<String> {
             let rest = rest.strip_prefix(':').unwrap_or(rest);
             let cleaned = clean_value(rest);
             let stripped = strip_peer_suffix(cleaned);
-            if !stripped.is_empty() {
+            // Skip workspace sentinels (`0.0.0-use.local`) and protocol
+            // strings (`workspace:.`, `portal:.`, etc.) so the caller gets
+            // `None` rather than an unfetchable "version". If another block
+            // later in the file has a real version, we'll find it there.
+            if is_registry_version(stripped) {
                 return Some(stripped.to_string());
             }
         }
@@ -591,6 +629,23 @@ mod tests {
         assert_eq!(clean_value("  \"1.2.3\"  "), "1.2.3");
         assert_eq!(clean_value("  1.2.3 # comment"), "1.2.3");
         assert_eq!(clean_value("  '1.2.3' # comment"), "1.2.3");
+    }
+
+    #[test]
+    fn test_is_registry_version() {
+        assert!(is_registry_version("1.2.3"));
+        assert!(is_registry_version("1.0.0-beta.1"));
+        assert!(is_registry_version("1.0.0-rc.1+build.5114f85"));
+        assert!(!is_registry_version(""));
+        assert!(!is_registry_version("0.0.0-use.local"));
+        assert!(!is_registry_version("link:../pkg"));
+        assert!(!is_registry_version("file:./tarball.tgz"));
+        assert!(!is_registry_version("workspace:*"));
+        assert!(!is_registry_version("workspace:^1.0.0"));
+        assert!(!is_registry_version("portal:../pkg"));
+        assert!(!is_registry_version("github:owner/repo"));
+        assert!(!is_registry_version("git+https://example.com/repo.git"));
+        assert!(!is_registry_version("npm:other-pkg@^1"));
     }
 
     // ---- pnpm: direct-lookup behaviour (preserved from previous rewrite) ----
@@ -786,6 +841,68 @@ dependencies:
   zod: 3.22.0 # pinned
 "#;
         assert_eq!(parse_pnpm_lock(text, "zod"), Some("3.22.0".into()));
+    }
+
+    #[test]
+    fn pnpm_skips_link_version_in_importer() {
+        // pnpm workspace dep pinned via `link:` must not be returned as a
+        // version — it would be passed verbatim to npm and fail.
+        let text = r#"lockfileVersion: '9.0'
+
+importers:
+  apps/web:
+    dependencies:
+      my-ui-lib:
+        specifier: workspace:^
+        version: link:../../packages/ui
+"#;
+        assert_eq!(parse_pnpm_lock(text, "my-ui-lib"), None);
+    }
+
+    #[test]
+    fn pnpm_workspace_link_in_first_importer_does_not_block_later_real_version() {
+        // First importer has a `link:` version; second has a real one. The
+        // first-wins policy should skip the workspace link and capture the
+        // real version.
+        let text = r#"lockfileVersion: '9.0'
+
+importers:
+  apps/web:
+    dependencies:
+      shared:
+        specifier: workspace:^
+        version: link:../../packages/shared
+  apps/docs:
+    dependencies:
+      shared:
+        specifier: ^1.2.3
+        version: 1.2.3
+"#;
+        assert_eq!(parse_pnpm_lock(text, "shared"), Some("1.2.3".into()));
+    }
+
+    #[test]
+    fn pnpm_skips_link_version_in_top_level_deps() {
+        let text = r#"lockfileVersion: '6.0'
+
+dependencies:
+  my-lib: link:../my-lib
+"#;
+        assert_eq!(parse_pnpm_lock(text, "my-lib"), None);
+    }
+
+    #[test]
+    fn pnpm_skips_file_protocol_in_importer() {
+        let text = r#"lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      tarball-pkg:
+        specifier: file:./pkg.tgz
+        version: file:pkg.tgz
+"#;
+        assert_eq!(parse_pnpm_lock(text, "tarball-pkg"), None);
     }
 
     #[test]
@@ -1047,6 +1164,47 @@ version: 3.22.0 # pinned\n";
         assert_eq!(parse_yarn_lock(text, "zod"), Some("3.22.0".into()));
     }
 
+    #[test]
+    fn yarn_berry_skips_workspace_root_sentinel() {
+        // Yarn Berry gives the workspace root `version: 0.0.0-use.local`.
+        // Returning that would make the caller try to fetch it from npm.
+        let text = "__metadata:\n  \
+version: 6\n\
+\n\
+\"myproject@workspace:.\":\n  \
+version: 0.0.0-use.local\n  \
+resolution: \"myproject@workspace:.\"\n";
+        assert_eq!(parse_yarn_lock(text, "myproject"), None);
+    }
+
+    #[test]
+    fn yarn_berry_workspace_block_does_not_block_later_real_block() {
+        // A workspace self-reference should be skipped, but a real block for
+        // the same name later in the file should still be found.
+        let text = "__metadata:\n  \
+version: 6\n\
+\n\
+\"foo@workspace:packages/foo\":\n  \
+version: 0.0.0-use.local\n  \
+resolution: \"foo@workspace:packages/foo\"\n\
+\n\
+\"foo@npm:^1.0.0\":\n  \
+version: 1.2.3\n  \
+resolution: \"foo@npm:1.2.3\"\n";
+        assert_eq!(parse_yarn_lock(text, "foo"), Some("1.2.3".into()));
+    }
+
+    #[test]
+    fn yarn_v1_skips_link_protocol_version() {
+        // Yarn v1 can record a `file:` or linked dep with a protocol version.
+        let text = "# yarn lockfile v1\n\
+\n\
+\n\
+\"my-lib@file:../my-lib\":\n  \
+version \"file:../my-lib\"\n";
+        assert_eq!(parse_yarn_lock(text, "my-lib"), None);
+    }
+
     // ---- Fixture-backed tests ----
 
     const YARN_V1_FIXTURE: &str = include_str!("../../tests/fixtures/yarn-v1.lock");
@@ -1193,5 +1351,73 @@ version: 3.22.0 # pinned\n";
             parse_pnpm_lock(PNPM_V9_FIXTURE, "typescript"),
             Some("5.3.3".into())
         );
+    }
+
+    // ---- package.json fallback ----
+
+    #[test]
+    fn package_json_strips_range_prefix() {
+        let json = r#"{"dependencies":{"zod":"^3.22.0"}}"#;
+        assert_eq!(
+            parse_package_json_version(json, "zod"),
+            Some("3.22.0".into())
+        );
+    }
+
+    #[test]
+    fn package_json_reads_dev_and_peer() {
+        let json = r#"{
+            "devDependencies":{"typescript":"~5.3.0"},
+            "peerDependencies":{"react":">=18.0.0"}
+        }"#;
+        assert_eq!(
+            parse_package_json_version(json, "typescript"),
+            Some("5.3.0".into())
+        );
+        assert_eq!(
+            parse_package_json_version(json, "react"),
+            Some("18.0.0".into())
+        );
+    }
+
+    #[test]
+    fn package_json_skips_workspace_protocol() {
+        let json = r#"{"dependencies":{"my-lib":"workspace:*"}}"#;
+        assert_eq!(parse_package_json_version(json, "my-lib"), None);
+    }
+
+    #[test]
+    fn package_json_skips_link_and_file_protocols() {
+        let json = r#"{
+            "dependencies":{
+                "linked":"link:../linked",
+                "tarball":"file:./pkg.tgz"
+            }
+        }"#;
+        assert_eq!(parse_package_json_version(json, "linked"), None);
+        assert_eq!(parse_package_json_version(json, "tarball"), None);
+    }
+
+    #[test]
+    fn package_json_skips_git_and_github_protocols() {
+        let json = r#"{
+            "dependencies":{
+                "from-github":"github:owner/repo#v1.0.0",
+                "from-git":"git+https://example.com/repo.git"
+            }
+        }"#;
+        assert_eq!(parse_package_json_version(json, "from-github"), None);
+        assert_eq!(parse_package_json_version(json, "from-git"), None);
+    }
+
+    #[test]
+    fn package_json_absent_returns_none() {
+        let json = r#"{"dependencies":{"zod":"^3.22.0"}}"#;
+        assert_eq!(parse_package_json_version(json, "not-there"), None);
+    }
+
+    #[test]
+    fn package_json_invalid_json_returns_none() {
+        assert_eq!(parse_package_json_version("not json", "zod"), None);
     }
 }
