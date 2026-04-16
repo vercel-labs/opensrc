@@ -13,6 +13,7 @@ pub fn run(json: bool) -> Result<(), Box<dyn std::error::Error>> {
         println!("  • npm:      opensrc path zod, opensrc path npm:react");
         println!("  • PyPI:     opensrc path pypi:requests");
         println!("  • crates:   opensrc path crates:serde");
+        println!("  • Go:       opensrc path go:golang.org/x/tools");
         return Ok(());
     }
 
@@ -22,7 +23,12 @@ pub fn run(json: bool) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let registries = [Registry::Npm, Registry::PyPI, Registry::Crates];
+    let registries = [
+        Registry::Npm,
+        Registry::PyPI,
+        Registry::Crates,
+        Registry::Go,
+    ];
     let mut displayed_packages = false;
 
     for registry in &registries {
