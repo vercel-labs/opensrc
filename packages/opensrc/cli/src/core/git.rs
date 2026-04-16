@@ -91,6 +91,80 @@ fn clone_at_tag(repo_url: &str, target: &Path, version: &str) -> CloneResult {
     }
 }
 
+fn clone_at_ref_sparse(repo_url: &str, target: &Path, git_ref: &str, subpath: &str) -> CloneResult {
+    let target_str = target.to_string_lossy();
+
+    let output = git_clone_output(&[
+        "clone",
+        "--filter=blob:none",
+        "--sparse",
+        "--depth",
+        "1",
+        "--branch",
+        git_ref,
+        "--single-branch",
+        repo_url,
+        &target_str,
+    ]);
+
+    match output {
+        Ok(o) if o.status.success() => {}
+        Ok(o) => {
+            let _ = fs::remove_dir_all(target);
+            let stderr = stderr_string(&o);
+            let msg = if stderr.is_empty() {
+                "Failed to sparse clone repository".to_string()
+            } else {
+                format!("Failed to sparse clone repository: {stderr}")
+            };
+            return CloneResult {
+                success: false,
+                error: Some(msg),
+            };
+        }
+        Err(e) => {
+            return CloneResult {
+                success: false,
+                error: Some(format!("Failed to run git: {e}")),
+            };
+        }
+    }
+
+    let sparse_out = Command::new("git")
+        .current_dir(target)
+        .args(["sparse-checkout", "set", subpath])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .output();
+
+    match sparse_out {
+        Ok(o) if o.status.success() => CloneResult {
+            success: true,
+            error: None,
+        },
+        Ok(o) => {
+            let _ = fs::remove_dir_all(target);
+            let stderr = stderr_string(&o);
+            let msg = if stderr.is_empty() {
+                "Failed to run git sparse-checkout".to_string()
+            } else {
+                format!("Failed to run git sparse-checkout: {stderr}")
+            };
+            CloneResult {
+                success: false,
+                error: Some(msg),
+            }
+        }
+        Err(e) => {
+            let _ = fs::remove_dir_all(target);
+            CloneResult {
+                success: false,
+                error: Some(format!("Failed to run git: {e}")),
+            }
+        }
+    }
+}
+
 fn clone_at_ref(repo_url: &str, target: &Path, git_ref: &str) -> CloneResult {
     let target_str = target.to_string_lossy();
 
@@ -224,7 +298,7 @@ pub fn fetch_source(resolved: &ResolvedPackage) -> FetchResult {
 pub fn fetch_repo_source(resolved: &ResolvedRepo) -> FetchResult {
     let repo_path = get_repo_path(&resolved.display_name, &resolved.git_ref);
 
-    if repo_path.exists() {
+    if resolved.subpath.is_none() && repo_path.exists() {
         return FetchResult {
             package: resolved.display_name.clone(),
             version: resolved.git_ref.clone(),
@@ -235,16 +309,26 @@ pub fn fetch_repo_source(resolved: &ResolvedRepo) -> FetchResult {
         };
     }
 
+    if resolved.subpath.is_some() && repo_path.exists() {
+        let _ = fs::remove_dir_all(&repo_path);
+    }
+
     if let Some(parent) = repo_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
 
     let clone_url = authenticated_clone_url(&resolved.repo_url);
-    let clone = clone_at_ref(&clone_url, &repo_path, &resolved.git_ref);
+    let clone = match resolved.subpath.as_deref() {
+        Some(sp) => clone_at_ref_sparse(&clone_url, &repo_path, &resolved.git_ref, sp),
+        None => clone_at_ref(&clone_url, &repo_path, &resolved.git_ref),
+    };
 
     if !clone.success {
         return FetchResult {
-            package: resolved.display_name.clone(),
+            package: match &resolved.subpath {
+                Some(sp) => format!("{}/{}", resolved.display_name, sp),
+                None => resolved.display_name.clone(),
+            },
             version: resolved.git_ref.clone(),
             path: get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
             success: false,
@@ -256,9 +340,19 @@ pub fn fetch_repo_source(resolved: &ResolvedRepo) -> FetchResult {
     remove_git_dir(&repo_path);
 
     FetchResult {
-        package: resolved.display_name.clone(),
+        package: match &resolved.subpath {
+            Some(sp) => format!("{}/{}", resolved.display_name, sp),
+            None => resolved.display_name.clone(),
+        },
         version: resolved.git_ref.clone(),
-        path: get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
+        path: match &resolved.subpath {
+            Some(sp) => format!(
+                "{}/{}",
+                get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
+                sp
+            ),
+            None => get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
+        },
         success: true,
         error: clone.error,
         registry: None,

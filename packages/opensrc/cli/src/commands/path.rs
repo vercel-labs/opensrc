@@ -106,10 +106,15 @@ fn handle_repo(spec: &str, _cwd: &str, verbose: bool) -> Result<(), Box<dyn std:
     };
 
     let display = format!("{}/{}/{}", repo_spec.host, repo_spec.owner, repo_spec.repo);
+    let display_with_subpath = repo_spec
+        .subpath
+        .as_ref()
+        .map(|s| format!("{display}/{s}"))
+        .unwrap_or_else(|| display.clone());
 
     // Check cache
     if let Some(ref r) = repo_spec.git_ref {
-        if let Some(existing) = get_repo_info(&display) {
+        if let Some(existing) = get_repo_info(&display_with_subpath) {
             if existing.version == *r {
                 let abs = get_absolute_path(&existing.path);
                 println!("{}", abs.display());
@@ -120,9 +125,23 @@ fn handle_repo(spec: &str, _cwd: &str, verbose: bool) -> Result<(), Box<dyn std:
 
     log(
         verbose,
-        &format!("Fetching {}/{}...", repo_spec.owner, repo_spec.repo),
+        &match &repo_spec.subpath {
+            Some(sp) => format!("Fetching {}/{}/{}...", repo_spec.owner, repo_spec.repo, sp),
+            None => format!("Fetching {}/{}...", repo_spec.owner, repo_spec.repo),
+        },
     );
     let resolved = resolve_repo(&repo_spec)?;
+
+    if repo_spec.git_ref.is_none() && repo_spec.subpath.is_some() {
+        if let Some(existing) = get_repo_info(&display_with_subpath) {
+            if existing.version == resolved.git_ref {
+                let abs = get_absolute_path(&existing.path);
+                println!("{}", abs.display());
+                return Ok(());
+            }
+        }
+    }
+
     log(verbose, &format!("  → Cloning at {}...", resolved.git_ref));
 
     let result = fetch_repo_source(&resolved);
