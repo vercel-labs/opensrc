@@ -2,6 +2,7 @@ pub mod crates;
 pub mod npm;
 pub mod pypi;
 pub mod repo;
+pub mod rubygems;
 
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +13,7 @@ pub enum Registry {
     #[serde(rename = "pypi")]
     PyPI,
     Crates,
+    RubyGems,
 }
 
 impl std::fmt::Display for Registry {
@@ -20,6 +22,7 @@ impl std::fmt::Display for Registry {
             Registry::Npm => write!(f, "npm"),
             Registry::PyPI => write!(f, "pypi"),
             Registry::Crates => write!(f, "crates"),
+            Registry::RubyGems => write!(f, "rubygems"),
         }
     }
 }
@@ -30,6 +33,7 @@ impl Registry {
             Registry::Npm => "npm",
             Registry::PyPI => "PyPI",
             Registry::Crates => "crates.io",
+            Registry::RubyGems => "RubyGems",
         }
     }
 }
@@ -64,6 +68,9 @@ const REGISTRY_PREFIXES: &[(&str, Registry)] = &[
     ("crates:", Registry::Crates),
     ("cargo:", Registry::Crates),
     ("rust:", Registry::Crates),
+    ("gem:", Registry::RubyGems),
+    ("ruby:", Registry::RubyGems),
+    ("rubygems:", Registry::RubyGems),
 ];
 
 pub fn detect_registry(spec: &str) -> DetectedRegistry {
@@ -92,6 +99,7 @@ pub fn parse_package_spec(spec: &str) -> PackageSpec {
         Registry::Npm => npm::parse_npm_spec(&detected.clean_spec),
         Registry::PyPI => pypi::parse_pypi_spec(&detected.clean_spec),
         Registry::Crates => crates::parse_crates_spec(&detected.clean_spec),
+        Registry::RubyGems => rubygems::parse_rubygems_spec(&detected.clean_spec),
     };
 
     PackageSpec {
@@ -106,6 +114,7 @@ pub fn resolve_package(spec: &PackageSpec) -> Result<ResolvedPackage, Box<dyn st
         Registry::Npm => npm::resolve_npm_package(&spec.name, spec.version.as_deref()),
         Registry::PyPI => pypi::resolve_pypi_package(&spec.name, spec.version.as_deref()),
         Registry::Crates => crates::resolve_crate(&spec.name, spec.version.as_deref()),
+        Registry::RubyGems => rubygems::resolve_rubygem(&spec.name, spec.version.as_deref()),
     }
 }
 
