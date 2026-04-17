@@ -7,12 +7,12 @@ pub fn run(json: bool) -> Result<(), Box<dyn std::error::Error>> {
 
     if total == 0 {
         println!("No sources cached yet.");
-        println!("\nUse `opensrc path <package>` to fetch source code for a package.");
-        println!("Use `opensrc path <owner>/<repo>` to fetch a GitHub repository.");
+        println!("\nUse `opensrc fetch <package>` to cache source code for a package.");
+        println!("Use `opensrc fetch <owner>/<repo>` to cache a GitHub repository.");
         println!("\nSupported registries:");
-        println!("  • npm:      opensrc path zod, opensrc path npm:react");
-        println!("  • PyPI:     opensrc path pypi:requests");
-        println!("  • crates:   opensrc path crates:serde");
+        println!("  • npm:      opensrc fetch zod, opensrc fetch npm:react");
+        println!("  • PyPI:     opensrc fetch pypi:requests");
+        println!("  • crates:   opensrc fetch crates:serde");
         return Ok(());
     }
 
