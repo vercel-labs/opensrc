@@ -1,6 +1,11 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+
+#[cfg(test)]
+pub static TEST_ENV_LOCK: LazyLock<std::sync::Mutex<()>> =
+    LazyLock::new(|| std::sync::Mutex::new(()));
 
 use serde::{Deserialize, Serialize};
 
@@ -156,11 +161,27 @@ pub fn write_sources(packages: Vec<PackageEntry>, repos: Vec<RepoEntry>) -> std:
     Ok(())
 }
 
-pub fn get_package_info(name: &str, registry: Registry) -> Option<PackageEntry> {
+pub fn get_package_info(
+    name: &str,
+    registry: Registry,
+    version: Option<&str>,
+) -> Option<PackageEntry> {
     let (packages, _) = list_sources();
-    packages
-        .into_iter()
-        .find(|p| p.name == name && p.registry == registry)
+    packages.into_iter().find(|p| {
+        p.name == name
+            && p.registry == registry
+            && version.is_none_or(|expected| p.version == expected)
+    })
+}
+
+pub fn upsert_package_entry(packages: &mut Vec<PackageEntry>, entry: PackageEntry) {
+    if let Some(idx) = packages.iter().position(|p| {
+        p.name == entry.name && p.registry == entry.registry && p.version == entry.version
+    }) {
+        packages[idx] = entry;
+    } else {
+        packages.push(entry);
+    }
 }
 
 pub fn get_repo_info(display_name: &str) -> Option<RepoEntry> {
@@ -177,42 +198,84 @@ pub fn extract_repo_base_path(full_path: &str) -> String {
     }
 }
 
+pub fn extract_versioned_repo_path(full_path: &str) -> String {
+    let parts: Vec<&str> = full_path.split('/').collect();
+    if parts.len() >= 5 && parts[0] == "repos" {
+        parts[..5].join("/")
+    } else {
+        full_path.to_string()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct RemovePackageSourceResult {
+    pub removed: Vec<PackageEntry>,
+    pub repo_removed: bool,
+}
+
 pub fn remove_package_source(
     name: &str,
     registry: Registry,
-) -> Result<(bool, bool), Box<dyn std::error::Error>> {
-    let (packages, _) = list_sources();
-    let pkg = match packages
+    version: Option<&str>,
+) -> Result<RemovePackageSourceResult, Box<dyn std::error::Error>> {
+    let (packages, repos) = list_sources();
+    let removed: Vec<PackageEntry> = packages
         .iter()
-        .find(|p| p.name == name && p.registry == registry)
-    {
-        Some(p) => p.clone(),
-        None => return Ok((false, false)),
-    };
+        .filter(|p| {
+            p.name == name
+                && p.registry == registry
+                && version.is_none_or(|expected| p.version == expected)
+        })
+        .cloned()
+        .collect();
 
-    let pkg_repo_base = extract_repo_base_path(&pkg.path);
+    if removed.is_empty() {
+        return Ok(RemovePackageSourceResult::default());
+    }
 
-    let others_use_same = packages.iter().any(|p| {
-        extract_repo_base_path(&p.path) == *pkg_repo_base
-            && !(p.name == name && p.registry == registry)
-    });
+    let remaining: Vec<&PackageEntry> = packages
+        .iter()
+        .filter(|candidate| {
+            !removed.iter().any(|target| {
+                candidate.name == target.name
+                    && candidate.version == target.version
+                    && candidate.registry == target.registry
+                    && candidate.path == target.path
+            })
+        })
+        .collect();
 
     let mut repo_removed = false;
+    let mut cleaned_paths = HashSet::new();
 
-    if !others_use_same {
-        let parts: Vec<&str> = pkg.path.split('/').collect();
-        if parts.len() >= 5 && parts[0] == "repos" {
-            let versioned = parts[..5].join("/");
-            let versioned_path = get_opensrc_dir().join(&versioned);
-            if versioned_path.exists() {
-                fs::remove_dir_all(&versioned_path)?;
-                repo_removed = true;
-                cleanup_empty_parent_dirs(&versioned);
-            }
+    for pkg in &removed {
+        let versioned_path = extract_versioned_repo_path(&pkg.path);
+        if !cleaned_paths.insert(versioned_path.clone()) {
+            continue;
+        }
+
+        let still_used = remaining
+            .iter()
+            .any(|entry| extract_versioned_repo_path(&entry.path) == versioned_path)
+            || repos
+                .iter()
+                .any(|entry| extract_versioned_repo_path(&entry.path) == versioned_path);
+        if still_used {
+            continue;
+        }
+
+        let absolute_path = get_opensrc_dir().join(&versioned_path);
+        if absolute_path.exists() {
+            fs::remove_dir_all(&absolute_path)?;
+            repo_removed = true;
+            cleanup_empty_parent_dirs(&versioned_path);
         }
     }
 
-    Ok((true, repo_removed))
+    Ok(RemovePackageSourceResult {
+        removed,
+        repo_removed,
+    })
 }
 
 pub fn remove_repo_source(
@@ -317,8 +380,69 @@ mod tests {
         assert_eq!(extract_repo_base_path("other"), "other".to_string());
     }
 
+    fn package_entry(name: &str, version: &str, registry: Registry, path: &str) -> PackageEntry {
+        PackageEntry {
+            name: name.to_string(),
+            version: version.to_string(),
+            registry,
+            path: path.to_string(),
+            fetched_at: now_iso(),
+        }
+    }
+
+    #[test]
+    fn test_upsert_package_entry_preserves_other_versions() {
+        let mut packages = vec![package_entry(
+            "zod",
+            "3.25.76",
+            Registry::Npm,
+            "repos/github.com/colinhacks/zod/3.25.76",
+        )];
+
+        upsert_package_entry(
+            &mut packages,
+            package_entry(
+                "zod",
+                "4.3.6",
+                Registry::Npm,
+                "repos/github.com/colinhacks/zod/4.3.6",
+            ),
+        );
+
+        assert_eq!(packages.len(), 2);
+        assert!(packages.iter().any(|pkg| pkg.version == "3.25.76"));
+        assert!(packages.iter().any(|pkg| pkg.version == "4.3.6"));
+    }
+
+    #[test]
+    fn test_upsert_package_entry_replaces_same_version() {
+        let mut packages = vec![package_entry(
+            "zod",
+            "4.3.6",
+            Registry::Npm,
+            "repos/github.com/colinhacks/zod/4.3.6",
+        )];
+
+        upsert_package_entry(
+            &mut packages,
+            package_entry(
+                "zod",
+                "4.3.6",
+                Registry::Npm,
+                "repos/github.com/colinhacks/zod/4.3.6/packages/zod",
+            ),
+        );
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(
+            packages[0].path,
+            "repos/github.com/colinhacks/zod/4.3.6/packages/zod"
+        );
+    }
+
     #[test]
     fn test_read_sources_corrupt_json_creates_backup() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let tmp = std::env::temp_dir().join("opensrc_test_corrupt");
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
@@ -341,7 +465,124 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_package_source_keeps_shared_version_directory_in_monorepo() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let tmp = std::env::temp_dir().join("opensrc_test_shared_version_directory");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        std::env::set_var("OPENSRC_HOME", tmp.to_str().unwrap());
+        write_sources(
+            vec![
+                package_entry(
+                    "pkg-a",
+                    "1.0.0",
+                    Registry::Npm,
+                    "repos/github.com/example/monorepo/1.0.0/packages/a",
+                ),
+                package_entry(
+                    "pkg-b",
+                    "1.0.0",
+                    Registry::Npm,
+                    "repos/github.com/example/monorepo/1.0.0/packages/b",
+                ),
+            ],
+            vec![],
+        )
+        .unwrap();
+
+        let versioned_repo_path = get_absolute_path("repos/github.com/example/monorepo/1.0.0");
+        fs::create_dir_all(&versioned_repo_path).unwrap();
+
+        let result = remove_package_source("pkg-a", Registry::Npm, Some("1.0.0")).unwrap();
+        assert_eq!(result.removed.len(), 1);
+        assert!(!result.repo_removed);
+        assert!(
+            versioned_repo_path.exists(),
+            "shared version directory should stay while another package entry still points to it"
+        );
+
+        std::env::remove_var("OPENSRC_HOME");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_remove_package_source_keeps_directory_when_repo_entry_still_uses_it() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let tmp = std::env::temp_dir().join("opensrc_test_package_repo_shared_directory");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        std::env::set_var("OPENSRC_HOME", tmp.to_str().unwrap());
+        write_sources(
+            vec![package_entry(
+                "pkg-a",
+                "1.0.0",
+                Registry::Npm,
+                "repos/github.com/example/monorepo/1.0.0/packages/a",
+            )],
+            vec![RepoEntry {
+                name: "github.com/example/monorepo".to_string(),
+                version: "1.0.0".to_string(),
+                path: "repos/github.com/example/monorepo/1.0.0".to_string(),
+                fetched_at: now_iso(),
+            }],
+        )
+        .unwrap();
+
+        let versioned_repo_path = get_absolute_path("repos/github.com/example/monorepo/1.0.0");
+        fs::create_dir_all(&versioned_repo_path).unwrap();
+
+        let result = remove_package_source("pkg-a", Registry::Npm, Some("1.0.0")).unwrap();
+        assert_eq!(result.removed.len(), 1);
+        assert!(!result.repo_removed);
+        assert!(
+            versioned_repo_path.exists(),
+            "package removal should not delete a checkout still referenced by a repo cache entry"
+        );
+
+        std::env::remove_var("OPENSRC_HOME");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_get_package_info_uses_exact_version() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let tmp = std::env::temp_dir().join("opensrc_test_exact_version_lookup");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        std::env::set_var("OPENSRC_HOME", tmp.to_str().unwrap());
+        write_sources(
+            vec![
+                package_entry(
+                    "zod",
+                    "3.25.76",
+                    Registry::Npm,
+                    "repos/github.com/colinhacks/zod/3.25.76",
+                ),
+                package_entry(
+                    "zod",
+                    "4.3.6",
+                    Registry::Npm,
+                    "repos/github.com/colinhacks/zod/4.3.6",
+                ),
+            ],
+            vec![],
+        )
+        .unwrap();
+
+        let package = get_package_info("zod", Registry::Npm, Some("4.3.6")).unwrap();
+        assert_eq!(package.version, "4.3.6");
+        assert_eq!(package.path, "repos/github.com/colinhacks/zod/4.3.6");
+
+        std::env::remove_var("OPENSRC_HOME");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn test_read_sources_valid_json() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let tmp = std::env::temp_dir().join("opensrc_test_valid");
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
