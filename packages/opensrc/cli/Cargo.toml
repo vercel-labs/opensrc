@@ -1,6 +1,6 @@
 [package]
 name = "opensrc"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 description = "Fetch source code for packages to give coding agents deeper context"
 license = "Apache-2.0"
