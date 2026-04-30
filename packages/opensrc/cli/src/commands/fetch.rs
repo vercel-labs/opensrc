@@ -1,10 +1,7 @@
+use crate::core::error::{Error, Result};
 use crate::core::fetcher::ensure_cached;
 
-pub fn run(
-    specs: &[String],
-    cwd: Option<&str>,
-    quiet: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(specs: &[String], cwd: Option<&str>, quiet: bool) -> Result<()> {
     let cwd = cwd.unwrap_or(".");
 
     let mut fetched = 0u32;
@@ -61,7 +58,9 @@ pub fn run(
     }
 
     if had_errors {
-        return Err("Some sources could not be fetched".into());
+        return Err(Error::Other(
+            "Some sources could not be fetched".to_string(),
+        ));
     }
 
     Ok(())

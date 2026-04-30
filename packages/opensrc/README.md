@@ -39,6 +39,19 @@ Options:
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
 
+### Fetch source code
+
+Pre-fetch one or more packages or repos into the cache without printing paths:
+
+```bash
+opensrc fetch zod
+opensrc fetch pypi:requests crates:serde vercel/next.js
+```
+
+Options:
+- `--cwd <path>` — working directory for lockfile version resolution
+- `--quiet` / `-q` — suppress progress output
+
 ### List cached sources
 
 ```bash
