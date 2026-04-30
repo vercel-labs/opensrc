@@ -74,6 +74,7 @@ opensrc clean --crates   # only crates.io packages
 | crates.io | `crates:`, `cargo:`, `rust:` | `opensrc path crates:serde` |
 | GitHub | `owner/repo` or URL | `opensrc path vercel/next.js` |
 | GitLab | `gitlab:` or URL | `opensrc path gitlab:owner/repo` |
+| Bitbucket | `bitbucket:` or URL | `opensrc path bitbucket:owner/repo` |
 
 ## How It Works
 

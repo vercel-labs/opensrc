@@ -54,9 +54,18 @@ See `~/.opensrc/sources.json` for the list of available packages and their versi
 
 Use this source code when you need to understand how a package works internally, not just its types/interface.
 
+### Fetching Source Code
+
+To just cache a package's source without doing anything else, use `opensrc fetch`:
+
+```bash
+opensrc fetch <package>
+opensrc fetch pypi:<package> crates:<package> <owner>/<repo>
+```
+
 ### Reading Source Code
 
-Use `opensrc path` inside other commands to search, read, or explore a package's source:
+Use `opensrc path` inside other commands to search, read, or explore a package's source (fetches on cache miss):
 
 ```bash
 rg "pattern" $(opensrc path <package>)

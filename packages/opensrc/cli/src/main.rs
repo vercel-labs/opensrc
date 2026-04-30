@@ -14,6 +14,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Fetch source code for one or more packages or repos into the cache
+    Fetch {
+        /// Packages or repo specs (e.g., zod, pypi:requests, owner/repo)
+        #[arg(required = true)]
+        packages: Vec<String>,
+        /// Working directory for lockfile version resolution
+        #[arg(long)]
+        cwd: Option<String>,
+        /// Suppress progress output
+        #[arg(long, short)]
+        quiet: bool,
+    },
     /// Print the absolute path to cached source (fetches on cache miss)
     Path {
         /// Packages or repo specs (e.g., zod, pypi:requests, owner/repo)
@@ -63,6 +75,12 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
+        Some(Commands::Fetch {
+            packages,
+            cwd,
+            quiet,
+        }) => commands::fetch::run(&packages, cwd.as_deref(), quiet),
+
         Some(Commands::Path {
             packages,
             cwd,

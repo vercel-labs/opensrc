@@ -1,8 +1,27 @@
 # opensrc
 
-## 0.7.1
+## 0.7.2
 
 <!-- release:start -->
+### New Features
+
+- **`opensrc fetch` subcommand** — Cache a package's source without printing paths, for use in scripts and CI where you just want the source downloaded (#53)
+- **Bitbucket Cloud support** — Fetch source from Bitbucket repos, with private repo authentication via `BITBUCKET_TOKEN` (#52)
+- **Authentication docs** — New docs page covering private repo authentication across GitHub, GitLab, and Bitbucket (#52)
+
+### Improvements
+
+- **Lockfile parsers** — Rewrite lockfile parsers with proper transitive dependency resolution for pnpm workspaces (#51)
+- **Skills location** — Move agent skill to a top-level `skills/` directory for easier discovery (#46)
+- **Docs favicon** — Add favicon to the docs site (#50)
+
+### Contributors
+
+- @ctate
+<!-- release:end -->
+
+## 0.7.1
+
 ### New Features
 
 - **Private repo support** — Authenticate with GitHub and GitLab private repos via `GITHUB_TOKEN` and `GITLAB_TOKEN` environment variables (#38)
@@ -10,7 +29,6 @@
 ### Bug Fixes
 
 - **`remove` command** — Accept the same repo formats as `fetch` (e.g. `github:owner/repo`, full URLs) instead of only `owner/repo` (#39)
-<!-- release:end -->
 
 ## 0.7.0
 

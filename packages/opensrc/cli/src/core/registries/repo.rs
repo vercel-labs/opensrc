@@ -166,10 +166,21 @@ struct GitLabApiResponse {
     default_branch: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct BitbucketMainBranch {
+    name: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct BitbucketApiResponse {
+    mainbranch: Option<BitbucketMainBranch>,
+}
+
 pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
     match spec.host.as_str() {
         "github.com" => resolve_github(spec),
         "gitlab.com" => resolve_gitlab(spec),
+        "bitbucket.org" => resolve_bitbucket(spec),
         _ => Ok(ResolvedRepo {
             git_ref: spec.git_ref.clone().unwrap_or_else(|| "main".to_string()),
             repo_url: format!("https://{}/{}/{}", spec.host, spec.owner, spec.repo),
@@ -264,6 +275,65 @@ fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
     })
 }
 
+fn resolve_bitbucket(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
+    let url = format!(
+        "https://api.bitbucket.org/2.0/repositories/{}/{}",
+        spec.owner, spec.repo
+    );
+
+    let client = super::http_client();
+    let mut req = client.get(&url);
+
+    if let Some(token) = super::bitbucket_token() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+
+    let resp = req.send()?;
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        let hint = if super::bitbucket_token().is_none() {
+            " If this is a private repo, set BITBUCKET_TOKEN."
+        } else {
+            " Your token may lack access to this repository."
+        };
+        return Err(format!(
+            "Repository \"{}/{}\" not found on Bitbucket.{hint}",
+            spec.owner, spec.repo
+        )
+        .into());
+    }
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED
+        || resp.status() == reqwest::StatusCode::FORBIDDEN
+    {
+        let hint = if super::bitbucket_token().is_none() {
+            " If this is a private repo, set BITBUCKET_TOKEN."
+        } else {
+            " Your token may lack access to this repository."
+        };
+        return Err(format!(
+            "Access denied to Bitbucket repository \"{}/{}\".{hint}",
+            spec.owner, spec.repo
+        )
+        .into());
+    }
+    if !resp.status().is_success() {
+        return Err(format!("Failed to fetch repository info: {}", resp.status()).into());
+    }
+
+    let data: BitbucketApiResponse = resp.json()?;
+    let resolved_ref = spec.git_ref.clone().unwrap_or_else(|| {
+        data.mainbranch
+            .and_then(|b| b.name)
+            .unwrap_or_else(|| "main".to_string())
+    });
+
+    Ok(ResolvedRepo {
+        git_ref: resolved_ref,
+        repo_url: format!("https://bitbucket.org/{}/{}", spec.owner, spec.repo),
+        display_name: format!("{}/{}/{}", spec.host, spec.owner, spec.repo),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,10 +372,41 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_repo_spec_bitbucket_prefix() {
+        let spec = parse_repo_spec("bitbucket:atlassian/python-bitbucket").unwrap();
+        assert_eq!(spec.host, "bitbucket.org");
+        assert_eq!(spec.owner, "atlassian");
+        assert_eq!(spec.repo, "python-bitbucket");
+        assert_eq!(spec.git_ref, None);
+    }
+
+    #[test]
+    fn test_parse_repo_spec_bitbucket_prefix_with_ref() {
+        let spec = parse_repo_spec("bitbucket:atlassian/python-bitbucket@master").unwrap();
+        assert_eq!(spec.host, "bitbucket.org");
+        assert_eq!(spec.owner, "atlassian");
+        assert_eq!(spec.repo, "python-bitbucket");
+        assert_eq!(spec.git_ref, Some("master".into()));
+    }
+
+    #[test]
+    fn test_parse_repo_spec_bitbucket_url() {
+        let spec = parse_repo_spec("https://bitbucket.org/atlassian/python-bitbucket").unwrap();
+        assert_eq!(spec.host, "bitbucket.org");
+        assert_eq!(spec.owner, "atlassian");
+        assert_eq!(spec.repo, "python-bitbucket");
+        assert_eq!(spec.git_ref, None);
+    }
+
+    #[test]
     fn test_is_repo_spec() {
         assert!(is_repo_spec("vercel/next.js"));
         assert!(is_repo_spec("github:vercel/next.js"));
         assert!(is_repo_spec("https://github.com/vercel/next.js"));
+        assert!(is_repo_spec("bitbucket:atlassian/python-bitbucket"));
+        assert!(is_repo_spec(
+            "https://bitbucket.org/atlassian/python-bitbucket"
+        ));
         assert!(!is_repo_spec("@babel/core"));
         assert!(!is_repo_spec("zod"));
     }
