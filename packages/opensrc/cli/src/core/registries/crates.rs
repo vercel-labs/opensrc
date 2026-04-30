@@ -1,5 +1,8 @@
-use super::{Registry, ResolvedPackage};
 use serde::Deserialize;
+
+use crate::core::error::{Error, Result};
+
+use super::{Registry, ResolvedPackage};
 
 const CRATES_API: &str = "https://crates.io/api/v1";
 
@@ -35,7 +38,7 @@ pub fn parse_crates_spec(spec: &str) -> (String, Option<String>) {
     (spec.trim().to_string(), None)
 }
 
-fn fetch_crate_info(name: &str) -> Result<CrateResponse, Box<dyn std::error::Error>> {
+fn fetch_crate_info(name: &str) -> Result<CrateResponse> {
     let url = format!("{CRATES_API}/crates/{name}");
 
     let client = super::http_client();
@@ -45,16 +48,22 @@ fn fetch_crate_info(name: &str) -> Result<CrateResponse, Box<dyn std::error::Err
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(format!("Crate \"{name}\" not found on crates.io").into());
+        return Err(Error::PackageNotFound {
+            name: name.to_string(),
+            registry: "crates.io".to_string(),
+        });
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch crate info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "crate info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     Ok(resp.json()?)
 }
 
-fn verify_crate_version(name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn verify_crate_version(name: &str, version: &str) -> Result<()> {
     let url = format!("{CRATES_API}/crates/{name}/{version}");
 
     let client = super::http_client();
@@ -64,13 +73,17 @@ fn verify_crate_version(name: &str, version: &str) -> Result<(), Box<dyn std::er
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(format!("Version \"{version}\" not found for crate \"{name}\"").into());
+        return Err(Error::VersionNotFound(format!(
+            "Version \"{version}\" not found for crate \"{name}\""
+        )));
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch crate version info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "crate version info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
-    // Just verify it parses; we don't need the data
     let _: CrateVersionResponse = resp.json()?;
     Ok(())
 }
@@ -91,10 +104,7 @@ fn extract_repo_url(krate: &CrateInfo) -> Option<String> {
     None
 }
 
-pub fn resolve_crate(
-    name: &str,
-    version: Option<&str>,
-) -> Result<ResolvedPackage, Box<dyn std::error::Error>> {
+pub fn resolve_crate(name: &str, version: Option<&str>) -> Result<ResolvedPackage> {
     let info = fetch_crate_info(name)?;
 
     let resolved_version = match version {
@@ -106,10 +116,10 @@ pub fn resolve_crate(
     };
 
     let repo_url = extract_repo_url(&info.krate).ok_or_else(|| {
-        format!(
+        Error::NoRepoUrl(format!(
             "No repository URL found for \"{name}@{resolved_version}\". \
              This crate may not have its source published."
-        )
+        ))
     })?;
 
     let git_tag = format!("v{resolved_version}");

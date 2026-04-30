@@ -4,17 +4,18 @@ use crate::core::cache::{
     cleanup_empty_dirs, extract_repo_base_path, get_opensrc_dir, get_repos_dir, list_sources,
     write_sources, PackageEntry, RepoEntry,
 };
+use crate::core::error::{Error, Result};
 use crate::core::registries::Registry;
 
 pub fn run(
     clean_packages_flag: bool,
     clean_repos_flag: bool,
     registry: Option<Registry>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     let clean_packages = clean_packages_flag || !clean_repos_flag;
     let clean_repos = clean_repos_flag || (!clean_packages_flag && registry.is_none());
 
-    let (packages, repos) = list_sources();
+    let (packages, repos) = list_sources()?;
 
     let mut remaining_packages: Vec<PackageEntry> = packages.clone();
     let mut remaining_repos: Vec<RepoEntry> = repos.clone();
@@ -64,7 +65,7 @@ pub fn run(
 
     let all_paths: std::collections::HashSet<String> =
         pkg_paths.union(&repo_paths).cloned().collect();
-    let opensrc_dir = get_opensrc_dir();
+    let opensrc_dir = get_opensrc_dir()?;
 
     let mut delete_errors = 0usize;
     for repo_path in &all_paths {
@@ -79,7 +80,7 @@ pub fn run(
         }
     }
 
-    let repos_dir = get_repos_dir();
+    let repos_dir = get_repos_dir()?;
     if repos_dir.exists() {
         cleanup_empty_dirs(&repos_dir);
     }
@@ -111,7 +112,9 @@ pub fn run(
     println!("\nCleaned {total} source(s)");
 
     if delete_errors > 0 {
-        return Err(format!("Failed to remove {delete_errors} path(s) from disk").into());
+        return Err(Error::Other(format!(
+            "Failed to remove {delete_errors} path(s) from disk"
+        )));
     }
 
     Ok(())

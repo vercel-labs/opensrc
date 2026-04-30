@@ -1,10 +1,11 @@
 use crate::core::cache::{
     get_package_info, list_sources, remove_package_source, remove_repo_source, write_sources,
 };
+use crate::core::error::{Error, Result};
 use crate::core::registries::repo::{is_repo_spec, parse_repo_spec};
 use crate::core::registries::{detect_registry, Registry};
 
-pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(items: &[String]) -> Result<()> {
     let mut removed = 0u32;
     let mut not_found = 0u32;
     let mut had_errors = false;
@@ -45,14 +46,13 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             let clean = &detected.clean_spec;
             let mut registry = detected.registry;
 
-            let mut pkg_info = get_package_info(clean, registry);
+            let mut pkg_info = get_package_info(clean, registry)?;
 
-            // Scan other registries if not found
             if pkg_info.is_none() {
                 let registries = [Registry::Npm, Registry::PyPI, Registry::Crates];
                 for reg in &registries {
                     if *reg != registry {
-                        if let Some(info) = get_package_info(clean, *reg) {
+                        if let Some(info) = get_package_info(clean, *reg)? {
                             pkg_info = Some(info);
                             registry = *reg;
                             break;
@@ -96,7 +96,7 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     println!("\nRemoved {removed} source(s){nf_msg}");
 
     if removed > 0 {
-        let (packages, repos) = list_sources();
+        let (packages, repos) = list_sources()?;
 
         let remaining_packages: Vec<_> = packages
             .into_iter()
@@ -116,7 +116,7 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if had_errors {
-        return Err("Some items could not be removed".into());
+        return Err(Error::Other("Some items could not be removed".to_string()));
     }
 
     Ok(())

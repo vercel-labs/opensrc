@@ -4,6 +4,7 @@ use crate::core::cache::{
     get_absolute_path, get_package_info, get_repo_info, list_sources, now_iso, write_sources,
     PackageEntry, RepoEntry,
 };
+use crate::core::error::{Error, Result};
 use crate::core::git::{fetch_repo_source, fetch_source};
 use crate::core::registries::repo::{parse_repo_spec, resolve_repo};
 use crate::core::registries::{
@@ -27,21 +28,17 @@ fn log(verbose: bool, msg: &str) {
     }
 }
 
-fn ensure_package_cached(
-    spec: &str,
-    cwd: &str,
-    verbose: bool,
-) -> Result<FetchOutcome, Box<dyn std::error::Error>> {
+fn ensure_package_cached(spec: &str, cwd: &str, verbose: bool) -> Result<FetchOutcome> {
     let parsed = parse_package_spec(spec);
     let registry = parsed.registry;
     let name = parsed.name.clone();
     let mut version = parsed.version.clone();
 
     if let Some(ref v) = version {
-        if let Some(existing) = get_package_info(&name, registry) {
+        if let Some(existing) = get_package_info(&name, registry)? {
             if existing.version == *v {
                 return Ok(FetchOutcome {
-                    path: get_absolute_path(&existing.path),
+                    path: get_absolute_path(&existing.path)?,
                     name: existing.name,
                     version: existing.version,
                     source_label: registry.label().to_string(),
@@ -56,10 +53,10 @@ fn ensure_package_cached(
         let detected = detect_installed_version(&name, &PathBuf::from(cwd));
         if let Some(v) = detected {
             version = Some(v.clone());
-            if let Some(existing) = get_package_info(&name, registry) {
+            if let Some(existing) = get_package_info(&name, registry)? {
                 if existing.version == v {
                     return Ok(FetchOutcome {
-                        path: get_absolute_path(&existing.path),
+                        path: get_absolute_path(&existing.path)?,
                         name: existing.name,
                         version: existing.version,
                         source_label: registry.label().to_string(),
@@ -84,17 +81,20 @@ fn ensure_package_cached(
     let resolved = resolve_package(&pkg_spec)?;
     log(verbose, &format!("  → Cloning at {}...", resolved.git_tag));
 
-    let result = fetch_source(&resolved);
+    let result = fetch_source(&resolved)?;
 
     if !result.success {
-        return Err(format!("Failed: {}", result.error.as_deref().unwrap_or("unknown")).into());
+        return Err(Error::CloneFailed(format!(
+            "Failed: {}",
+            result.error.as_deref().unwrap_or("unknown")
+        )));
     }
 
     if let Some(ref warn) = result.error {
         log(verbose, &format!("  ⚠ {warn}"));
     }
 
-    let (mut packages, repos) = list_sources();
+    let (mut packages, repos) = list_sources()?;
     let entry = PackageEntry {
         name: result.package.clone(),
         version: result.version.clone(),
@@ -113,7 +113,7 @@ fn ensure_package_cached(
     write_sources(packages, repos)?;
 
     Ok(FetchOutcome {
-        path: get_absolute_path(&result.path),
+        path: get_absolute_path(&result.path)?,
         name: result.package,
         version: result.version,
         source_label: registry.label().to_string(),
@@ -122,24 +122,17 @@ fn ensure_package_cached(
     })
 }
 
-fn ensure_repo_cached(
-    spec: &str,
-    verbose: bool,
-) -> Result<FetchOutcome, Box<dyn std::error::Error>> {
-    let repo_spec = match parse_repo_spec(spec) {
-        Some(s) => s,
-        None => {
-            return Err(format!("Invalid repository format: {spec}").into());
-        }
-    };
+fn ensure_repo_cached(spec: &str, verbose: bool) -> Result<FetchOutcome> {
+    let repo_spec =
+        parse_repo_spec(spec).ok_or_else(|| Error::InvalidRepoSpec(spec.to_string()))?;
 
     let display = format!("{}/{}/{}", repo_spec.host, repo_spec.owner, repo_spec.repo);
 
     if let Some(ref r) = repo_spec.git_ref {
-        if let Some(existing) = get_repo_info(&display) {
+        if let Some(existing) = get_repo_info(&display)? {
             if existing.version == *r {
                 return Ok(FetchOutcome {
-                    path: get_absolute_path(&existing.path),
+                    path: get_absolute_path(&existing.path)?,
                     name: existing.name,
                     version: existing.version,
                     source_label: repo_spec.host.clone(),
@@ -157,17 +150,20 @@ fn ensure_repo_cached(
     let resolved = resolve_repo(&repo_spec)?;
     log(verbose, &format!("  → Cloning at {}...", resolved.git_ref));
 
-    let result = fetch_repo_source(&resolved);
+    let result = fetch_repo_source(&resolved)?;
 
     if !result.success {
-        return Err(format!("Failed: {}", result.error.as_deref().unwrap_or("unknown")).into());
+        return Err(Error::CloneFailed(format!(
+            "Failed: {}",
+            result.error.as_deref().unwrap_or("unknown")
+        )));
     }
 
     if let Some(ref warn) = result.error {
         log(verbose, &format!("  ⚠ {warn}"));
     }
 
-    let (packages, mut repos) = list_sources();
+    let (packages, mut repos) = list_sources()?;
     let entry = RepoEntry {
         name: result.package.clone(),
         version: result.version.clone(),
@@ -182,7 +178,7 @@ fn ensure_repo_cached(
     write_sources(packages, repos)?;
 
     Ok(FetchOutcome {
-        path: get_absolute_path(&result.path),
+        path: get_absolute_path(&result.path)?,
         name: result.package,
         version: result.version,
         source_label: repo_spec.host,
@@ -193,11 +189,7 @@ fn ensure_repo_cached(
 
 /// Ensure the given spec (package or repo) is cached locally, fetching it if
 /// necessary. Returns information about where it ended up on disk.
-pub fn ensure_cached(
-    spec: &str,
-    cwd: &str,
-    verbose: bool,
-) -> Result<FetchOutcome, Box<dyn std::error::Error>> {
+pub fn ensure_cached(spec: &str, cwd: &str, verbose: bool) -> Result<FetchOutcome> {
     if detect_input_type(spec) == "repo" {
         ensure_repo_cached(spec, verbose)
     } else {

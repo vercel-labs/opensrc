@@ -2,6 +2,8 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
+use crate::core::error::{Error, Result};
+
 static RE_URL: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"^https?://(github\.com|gitlab\.com|bitbucket\.org)/").unwrap()
 });
@@ -176,7 +178,7 @@ struct BitbucketApiResponse {
     mainbranch: Option<BitbucketMainBranch>,
 }
 
-pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
+pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo> {
     match spec.host.as_str() {
         "github.com" => resolve_github(spec),
         "gitlab.com" => resolve_gitlab(spec),
@@ -189,7 +191,7 @@ pub fn resolve_repo(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error:
     }
 }
 
-fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
+fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo> {
     let url = format!("https://api.github.com/repos/{}/{}", spec.owner, spec.repo);
 
     let client = super::http_client();
@@ -209,17 +211,19 @@ fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
         } else {
             " Your token may lack access to this repository."
         };
-        return Err(format!(
+        return Err(Error::RepoNotFound(format!(
             "Repository \"{}/{}\" not found on GitHub.{hint}",
             spec.owner, spec.repo
-        )
-        .into());
+        )));
     }
     if resp.status() == reqwest::StatusCode::FORBIDDEN {
-        return Err("GitHub API rate limit exceeded. Try again later or set GITHUB_TOKEN.".into());
+        return Err(Error::RateLimitExceeded);
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch repository info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "repository info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     let data: GitHubApiResponse = resp.json()?;
@@ -232,7 +236,7 @@ fn resolve_github(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
     })
 }
 
-fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
+fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo> {
     let project_path = format!("{}/{}", spec.owner, spec.repo);
     let encoded = urlencoding::encode(&project_path);
     let url = format!("https://gitlab.com/api/v4/projects/{encoded}");
@@ -252,14 +256,16 @@ fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
         } else {
             " Your token may lack access to this repository."
         };
-        return Err(format!(
+        return Err(Error::RepoNotFound(format!(
             "Repository \"{}/{}\" not found on GitLab.{hint}",
             spec.owner, spec.repo
-        )
-        .into());
+        )));
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch repository info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "repository info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     let data: GitLabApiResponse = resp.json()?;
@@ -275,7 +281,7 @@ fn resolve_gitlab(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::E
     })
 }
 
-fn resolve_bitbucket(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error::Error>> {
+fn resolve_bitbucket(spec: &RepoSpec) -> Result<ResolvedRepo> {
     let url = format!(
         "https://api.bitbucket.org/2.0/repositories/{}/{}",
         spec.owner, spec.repo
@@ -296,11 +302,10 @@ fn resolve_bitbucket(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error
         } else {
             " Your token may lack access to this repository."
         };
-        return Err(format!(
+        return Err(Error::RepoNotFound(format!(
             "Repository \"{}/{}\" not found on Bitbucket.{hint}",
             spec.owner, spec.repo
-        )
-        .into());
+        )));
     }
     if resp.status() == reqwest::StatusCode::UNAUTHORIZED
         || resp.status() == reqwest::StatusCode::FORBIDDEN
@@ -310,14 +315,16 @@ fn resolve_bitbucket(spec: &RepoSpec) -> Result<ResolvedRepo, Box<dyn std::error
         } else {
             " Your token may lack access to this repository."
         };
-        return Err(format!(
+        return Err(Error::AccessDenied(format!(
             "Access denied to Bitbucket repository \"{}/{}\".{hint}",
             spec.owner, spec.repo
-        )
-        .into());
+        )));
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch repository info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "repository info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     let data: BitbucketApiResponse = resp.json()?;
