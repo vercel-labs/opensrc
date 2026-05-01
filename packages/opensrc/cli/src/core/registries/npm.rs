@@ -157,6 +157,7 @@ pub fn resolve_npm_package(name: &str, version: Option<&str>) -> Result<Resolved
         repo_url,
         repo_directory,
         git_tag,
+        version_pinned: version.is_some(),
     })
 }
 
