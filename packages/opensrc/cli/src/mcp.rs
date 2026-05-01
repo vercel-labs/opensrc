@@ -6,9 +6,9 @@ use rmcp::{schemars, tool, tool_router, ServiceExt};
 use serde::{Deserialize, Serialize};
 
 use crate::core::cache::{
-    cleanup_empty_dirs, extract_repo_base_path, get_opensrc_dir, get_repos_dir,
-    get_package_info, list_sources, read_sources, remove_package_source, remove_repo_source,
-    write_sources, PackageEntry, RepoEntry,
+    cleanup_empty_dirs, extract_repo_base_path, get_opensrc_dir, get_package_info, get_repos_dir,
+    list_sources, read_sources, remove_package_source, remove_repo_source, write_sources,
+    PackageEntry, RepoEntry,
 };
 use crate::core::error::Error;
 use crate::core::fetcher::ensure_cached;
@@ -96,9 +96,11 @@ pub struct OpensrcServer;
 
 #[tool_router(server_handler)]
 impl OpensrcServer {
-    #[tool(description = "Fetch source code for one or more packages or repos into the local cache. \
+    #[tool(
+        description = "Fetch source code for one or more packages or repos into the local cache. \
         Accepts npm packages (e.g. \"zod\"), PyPI packages (\"pypi:requests\"), \
-        crates.io packages (\"crates:serde\"), or GitHub repos (\"owner/repo\").")]
+        crates.io packages (\"crates:serde\"), or GitHub repos (\"owner/repo\")."
+    )]
     async fn opensrc_fetch(&self, Parameters(params): Parameters<FetchParams>) -> String {
         let packages = params.packages;
         let cwd = params.cwd.unwrap_or_else(|| ".".to_string());
@@ -135,17 +137,17 @@ impl OpensrcServer {
         .unwrap_or_else(|e| format!("Error: {e}"))
     }
 
-    #[tool(description = "Get the absolute path to a cached package's source code. \
-        Fetches on cache miss. Use this path with file-reading tools to explore the source.")]
+    #[tool(
+        description = "Get the absolute path to a cached package's source code. \
+        Fetches on cache miss. Use this path with file-reading tools to explore the source."
+    )]
     async fn opensrc_path(&self, Parameters(params): Parameters<PathParams>) -> String {
         let package = params.package;
         let cwd = params.cwd.unwrap_or_else(|| ".".to_string());
 
-        tokio::task::spawn_blocking(move || {
-            match ensure_cached(&package, &cwd, false) {
-                Ok(outcome) => outcome.path.display().to_string(),
-                Err(e) => format!("Error: {e}"),
-            }
+        tokio::task::spawn_blocking(move || match ensure_cached(&package, &cwd, false) {
+            Ok(outcome) => outcome.path.display().to_string(),
+            Err(e) => format!("Error: {e}"),
         })
         .await
         .unwrap_or_else(|e| format!("Error: {e}"))
@@ -154,13 +156,11 @@ impl OpensrcServer {
     #[tool(description = "List all cached source code packages and repos. \
         Returns the full sources index as JSON.")]
     async fn opensrc_list(&self) -> String {
-        tokio::task::spawn_blocking(|| {
-            match read_sources() {
-                Ok(index) => {
-                    serde_json::to_string_pretty(&index).unwrap_or_else(|e| format!("Error: {e}"))
-                }
-                Err(e) => format!("Error: {e}"),
+        tokio::task::spawn_blocking(|| match read_sources() {
+            Ok(index) => {
+                serde_json::to_string_pretty(&index).unwrap_or_else(|e| format!("Error: {e}"))
             }
+            Err(e) => format!("Error: {e}"),
         })
         .await
         .unwrap_or_else(|e| format!("Error: {e}"))
@@ -284,8 +284,7 @@ impl OpensrcServer {
             let clean_repos_flag = params.repos.unwrap_or(false);
 
             let clean_packages = clean_packages_flag || registry.is_some() || !clean_repos_flag;
-            let clean_repos =
-                clean_repos_flag || (!clean_packages_flag && registry.is_none());
+            let clean_repos = clean_repos_flag || (!clean_packages_flag && registry.is_none());
 
             let (packages, repos) = match list_sources() {
                 Ok(v) => v,
@@ -299,8 +298,16 @@ impl OpensrcServer {
 
             if clean_packages {
                 if let Some(reg) = registry {
-                    packages_to_remove = packages.iter().filter(|p| p.registry == reg).cloned().collect();
-                    remaining_packages = packages.iter().filter(|p| p.registry != reg).cloned().collect();
+                    packages_to_remove = packages
+                        .iter()
+                        .filter(|p| p.registry == reg)
+                        .cloned()
+                        .collect();
+                    remaining_packages = packages
+                        .iter()
+                        .filter(|p| p.registry != reg)
+                        .cloned()
+                        .collect();
                 } else {
                     packages_to_remove = packages.clone();
                     remaining_packages = Vec::new();
@@ -321,7 +328,8 @@ impl OpensrcServer {
                 .iter()
                 .map(|p| extract_repo_base_path(&p.path))
                 .collect();
-            let repo_paths: HashSet<String> = repos_to_remove.iter().map(|r| r.path.clone()).collect();
+            let repo_paths: HashSet<String> =
+                repos_to_remove.iter().map(|r| r.path.clone()).collect();
             let needed_paths: HashSet<String> = remaining_packages
                 .iter()
                 .map(|p| extract_repo_base_path(&p.path))
