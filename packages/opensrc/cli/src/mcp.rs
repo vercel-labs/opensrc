@@ -273,12 +273,17 @@ impl OpensrcServer {
         or 'registry' to target a specific registry (\"npm\", \"pypi\", \"crates\").")]
     async fn opensrc_clean(&self, Parameters(params): Parameters<CleanParams>) -> String {
         tokio::task::spawn_blocking(move || {
-            let registry = params.registry.as_deref().and_then(|r| match r {
-                "npm" => Some(Registry::Npm),
-                "pypi" => Some(Registry::PyPI),
-                "crates" => Some(Registry::Crates),
-                _ => None,
-            });
+            let registry = match params.registry.as_deref() {
+                Some("npm") => Some(Registry::Npm),
+                Some("pypi") => Some(Registry::PyPI),
+                Some("crates") => Some(Registry::Crates),
+                Some(other) => {
+                    return format!(
+                        "Error: unknown registry \"{other}\". Valid options: \"npm\", \"pypi\", \"crates\""
+                    );
+                }
+                None => None,
+            };
 
             let clean_packages_flag = params.packages.unwrap_or(false);
             let clean_repos_flag = params.repos.unwrap_or(false);
@@ -375,7 +380,7 @@ impl OpensrcServer {
 }
 
 pub fn run() -> crate::core::error::Result<()> {
-    let rt = tokio::runtime::Builder::new_multi_thread()
+    let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| Error::Other(format!("Failed to create tokio runtime: {e}")))?;
