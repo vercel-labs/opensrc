@@ -2,6 +2,7 @@ use crate::core::cache::{
     get_package_info, list_sources, remove_package_source, remove_repo_source, write_sources,
     PackageEntry,
 };
+use crate::core::error::{Error, Result};
 use crate::core::registries::repo::{is_repo_spec, parse_repo_spec};
 use crate::core::registries::{parse_package_spec, Registry};
 
@@ -15,8 +16,8 @@ fn is_same_package_entry(left: &PackageEntry, right: &PackageEntry) -> bool {
 fn persist_removed_sources(
     removed_packages: &[PackageEntry],
     removed_repos: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let (packages, repos) = list_sources();
+) -> Result<()> {
+    let (packages, repos) = list_sources()?;
 
     let remaining_packages: Vec<_> = packages
         .into_iter()
@@ -36,7 +37,7 @@ fn persist_removed_sources(
     Ok(())
 }
 
-pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(items: &[String]) -> Result<()> {
     let mut removed = 0u32;
     let mut not_found = 0u32;
     let mut had_errors = false;
@@ -79,14 +80,13 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             let version = parsed.version;
             let mut registry = parsed.registry;
 
-            let mut pkg_info = get_package_info(&clean, registry, version.as_deref());
+            let mut pkg_info = get_package_info(&clean, registry, version.as_deref())?;
 
-            // Scan other registries if not found
             if pkg_info.is_none() {
                 let registries = [Registry::Npm, Registry::PyPI, Registry::Crates];
                 for reg in &registries {
                     if *reg != registry {
-                        if let Some(info) = get_package_info(&clean, *reg, version.as_deref()) {
+                        if let Some(info) = get_package_info(&clean, *reg, version.as_deref())? {
                             pkg_info = Some(info);
                             registry = *reg;
                             break;
@@ -138,7 +138,7 @@ pub fn run(items: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     println!("\nRemoved {removed} source(s){nf_msg}");
 
     if had_errors {
-        return Err("Some items could not be removed".into());
+        return Err(Error::Other("Some items could not be removed".to_string()));
     }
 
     Ok(())
@@ -194,12 +194,12 @@ mod tests {
         std::env::set_var("OPENSRC_HOME", &tmp);
 
         write_sources(vec![zod3.clone(), zod4.clone()], vec![]).unwrap();
-        fs::create_dir_all(get_absolute_path(&zod3.path)).unwrap();
-        fs::create_dir_all(get_absolute_path(&zod4.path)).unwrap();
+        fs::create_dir_all(get_absolute_path(&zod3.path).unwrap()).unwrap();
+        fs::create_dir_all(get_absolute_path(&zod4.path).unwrap()).unwrap();
 
         run(&["zod@3.25.76".to_string()]).unwrap();
 
-        let (packages, _) = list_sources();
+        let (packages, _) = list_sources().unwrap();
         assert_eq!(
             packages.len(),
             1,
@@ -208,11 +208,11 @@ mod tests {
         assert_eq!(packages[0].name, "zod");
         assert_eq!(packages[0].version, "4.3.6");
         assert!(
-            !get_absolute_path(&zod3.path).exists(),
+            !get_absolute_path(&zod3.path).unwrap().exists(),
             "the removed version directory should be deleted"
         );
         assert!(
-            get_absolute_path(&zod4.path).exists(),
+            get_absolute_path(&zod4.path).unwrap().exists(),
             "other cached versions should stay on disk"
         );
 
@@ -231,22 +231,22 @@ mod tests {
         std::env::set_var("OPENSRC_HOME", &tmp);
 
         write_sources(vec![zod3.clone(), zod4.clone()], vec![]).unwrap();
-        fs::create_dir_all(get_absolute_path(&zod3.path)).unwrap();
-        fs::create_dir_all(get_absolute_path(&zod4.path)).unwrap();
+        fs::create_dir_all(get_absolute_path(&zod3.path).unwrap()).unwrap();
+        fs::create_dir_all(get_absolute_path(&zod4.path).unwrap()).unwrap();
 
         run(&["zod".to_string()]).unwrap();
 
-        let (packages, _) = list_sources();
+        let (packages, _) = list_sources().unwrap();
         assert!(
             packages.is_empty(),
             "all cached versions should be removed from the index"
         );
         assert!(
-            !get_absolute_path(&zod3.path).exists(),
+            !get_absolute_path(&zod3.path).unwrap().exists(),
             "the first cached version directory should be deleted"
         );
         assert!(
-            !get_absolute_path(&zod4.path).exists(),
+            !get_absolute_path(&zod4.path).unwrap().exists(),
             "the second cached version directory should be deleted too"
         );
 
@@ -265,13 +265,14 @@ mod tests {
         fs::create_dir_all(&tmp).unwrap();
         std::env::set_var("OPENSRC_HOME", &tmp);
 
-        let shared_version_dir = get_absolute_path("repos/github.com/example/monorepo/1.0.0");
+        let shared_version_dir =
+            get_absolute_path("repos/github.com/example/monorepo/1.0.0").unwrap();
         write_sources(vec![pkg_a, pkg_b], vec![]).unwrap();
         fs::create_dir_all(&shared_version_dir).unwrap();
 
         run(&["pkg-a".to_string(), "pkg-b".to_string()]).unwrap();
 
-        let (packages, _) = list_sources();
+        let (packages, _) = list_sources().unwrap();
         assert!(packages.is_empty());
         assert!(
             !shared_version_dir.exists(),

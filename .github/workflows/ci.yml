@@ -71,3 +71,7 @@ jobs:
       - name: Build docs
         run: pnpm build
         working-directory: apps/docs
+
+      - name: Type check docs
+        run: pnpm type-check
+        working-directory: apps/docs

@@ -18,6 +18,7 @@ dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 url = "2"
+thiserror = "2"
 urlencoding = "2"
 
 [profile.release]
