@@ -22,7 +22,7 @@ When you run `opensrc path zod`, the following happens:
 5. **Cache storage** — stores the result in `~/.opensrc/repos/github.com/colinhacks/zod/v3.24.1/`
 6. **Path output** — prints the absolute path to stdout (progress goes to stderr so subshells work)
 
-On subsequent runs, steps 1-4 are skipped and the cached path is returned instantly.
+On subsequent runs for the same package version, steps 1-4 are skipped and the cached path is returned instantly. Multiple versions of the same package can be cached at once because each checkout lives under its versioned directory.
 
 ## Version Detection
 
@@ -46,7 +46,8 @@ All source code is cached in `~/.opensrc/`:
 │   └── github.com/
 │       ├── colinhacks/
 │       │   └── zod/
-│       │       └── v3.24.1/
+│       │       ├── v3.24.1/
+│       │       └── v4.0.0/
 │       └── vercel/
 │           └── ai/
 │               └── main/
@@ -67,6 +68,13 @@ The `OPENSRC_HOME` environment variable overrides the default cache location.
       "version": "3.24.1",
       "registry": "npm",
       "path": "repos/github.com/colinhacks/zod/v3.24.1",
+      "fetchedAt": "2025-01-15T10:30:00Z"
+    },
+    {
+      "name": "zod",
+      "version": "4.0.0",
+      "registry": "npm",
+      "path": "repos/github.com/colinhacks/zod/v4.0.0",
       "fetchedAt": "2025-01-15T10:30:00Z"
     }
   ],

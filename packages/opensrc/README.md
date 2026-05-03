@@ -35,6 +35,8 @@ rg "ZodError" $(opensrc path zod@3.22.0)
 cat $(opensrc path pypi:flask@3.0.0)/src/flask/app.py
 ```
 
+Different versions of the same package can coexist in the cache. `opensrc path zod@3.22.0` and `opensrc path zod@4.0.0` return different versioned directories.
+
 Options:
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
@@ -63,9 +65,12 @@ opensrc list --json   # JSON output
 
 ```bash
 opensrc remove zod
+opensrc remove zod@3.22.0
 opensrc remove vercel/next.js
 opensrc rm pypi:requests
 ```
+
+Pass a version to remove only that cached version. Without a version, all cached versions for that package are removed.
 
 ### Clean cache
 

@@ -40,6 +40,18 @@ opensrc path pypi:requests pypi:flask
 opensrc path crates:serde crates:tokio
 ```
 
+### Specific versions
+
+Pin a package version in the spec:
+
+```bash
+opensrc path zod@3.22.0
+opensrc path zod@4.0.0
+opensrc path pypi:flask@3.0.0
+```
+
+Different versions of the same package can coexist in the cache and resolve to different versioned directories.
+
 ### Options
 
 | Flag | Description |
@@ -62,9 +74,12 @@ Remove a specific package or repository from the cache:
 
 ```bash
 opensrc remove zod
+opensrc remove zod@3.22.0
 opensrc remove pypi:requests
 opensrc remove vercel/ai
 ```
+
+Passing a version removes only that cached version. Omitting the version removes all cached versions for the package.
 
 ## clean
 

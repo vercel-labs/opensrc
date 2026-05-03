@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use crate::core::cache::{
-    get_absolute_path, get_package_info, get_repo_info, list_sources, now_iso, write_sources,
-    PackageEntry, RepoEntry,
+    get_absolute_path, get_package_info, get_repo_info, list_sources, now_iso,
+    upsert_package_entry, write_sources, PackageEntry, RepoEntry,
 };
 use crate::core::error::{Error, Result};
 use crate::core::git::{fetch_repo_source, fetch_source};
@@ -35,8 +35,23 @@ fn ensure_package_cached(spec: &str, cwd: &str, verbose: bool) -> Result<FetchOu
     let mut version = parsed.version.clone();
 
     if let Some(ref v) = version {
-        if let Some(existing) = get_package_info(&name, registry)? {
-            if existing.version == *v {
+        if let Some(existing) = get_package_info(&name, registry, Some(v))? {
+            return Ok(FetchOutcome {
+                path: get_absolute_path(&existing.path)?,
+                name: existing.name,
+                version: existing.version,
+                source_label: registry.label().to_string(),
+                from_cache: true,
+                warning: None,
+            });
+        }
+    }
+
+    if version.is_none() && registry == Registry::Npm {
+        let detected = detect_installed_version(&name, &PathBuf::from(cwd));
+        if let Some(v) = detected {
+            version = Some(v.clone());
+            if let Some(existing) = get_package_info(&name, registry, Some(&v))? {
                 return Ok(FetchOutcome {
                     path: get_absolute_path(&existing.path)?,
                     name: existing.name,
@@ -45,25 +60,6 @@ fn ensure_package_cached(spec: &str, cwd: &str, verbose: bool) -> Result<FetchOu
                     from_cache: true,
                     warning: None,
                 });
-            }
-        }
-    }
-
-    if version.is_none() && registry == Registry::Npm {
-        let detected = detect_installed_version(&name, &PathBuf::from(cwd));
-        if let Some(v) = detected {
-            version = Some(v.clone());
-            if let Some(existing) = get_package_info(&name, registry)? {
-                if existing.version == v {
-                    return Ok(FetchOutcome {
-                        path: get_absolute_path(&existing.path)?,
-                        name: existing.name,
-                        version: existing.version,
-                        source_label: registry.label().to_string(),
-                        from_cache: true,
-                        warning: None,
-                    });
-                }
             }
         }
     }
@@ -102,14 +98,7 @@ fn ensure_package_cached(spec: &str, cwd: &str, verbose: bool) -> Result<FetchOu
         path: result.path.clone(),
         fetched_at: now_iso(),
     };
-    if let Some(idx) = packages
-        .iter()
-        .position(|p| p.name == entry.name && p.registry == entry.registry)
-    {
-        packages[idx] = entry.clone();
-    } else {
-        packages.push(entry.clone());
-    }
+    upsert_package_entry(&mut packages, entry.clone());
     write_sources(packages, repos)?;
 
     Ok(FetchOutcome {

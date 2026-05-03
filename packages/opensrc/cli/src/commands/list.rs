@@ -27,10 +27,15 @@ pub fn run(json: bool) -> Result<()> {
     let mut displayed_packages = false;
 
     for registry in &registries {
-        let pkgs: Vec<_> = packages
+        let mut pkgs: Vec<_> = packages
             .iter()
             .filter(|p| p.registry == *registry)
             .collect();
+        pkgs.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then_with(|| left.version.cmp(&right.version))
+        });
         if pkgs.is_empty() {
             continue;
         }
@@ -56,6 +61,13 @@ pub fn run(json: bool) -> Result<()> {
             println!();
         }
         println!("Repositories:\n");
+
+        let mut repos = repos.iter().collect::<Vec<_>>();
+        repos.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then_with(|| left.version.cmp(&right.version))
+        });
 
         for repo in &repos {
             let date = format_date(&repo.fetched_at);
