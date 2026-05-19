@@ -48,8 +48,16 @@ pub fn run(items: &[String]) -> Result<()> {
 
             let mut pkg_info = get_package_info(clean, registry)?;
 
-            if pkg_info.is_none() {
-                let registries = [Registry::Npm, Registry::PyPI, Registry::Crates];
+            // Only fall back across registries when the user did not supply an
+            // explicit prefix. `opensrc remove gem:rails` must never delete an
+            // npm/PyPI/crates package named `rails`.
+            if pkg_info.is_none() && !detected.was_explicit {
+                let registries = [
+                    Registry::Npm,
+                    Registry::PyPI,
+                    Registry::Crates,
+                    Registry::RubyGems,
+                ];
                 for reg in &registries {
                     if *reg != registry {
                         if let Some(info) = get_package_info(clean, *reg)? {
