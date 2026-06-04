@@ -77,7 +77,44 @@ pub fn get_repo_display_name(repo_url: &str) -> Option<String> {
     parse_repo_url(repo_url).map(|(host, owner, repo)| format!("{host}/{owner}/{repo}"))
 }
 
+/// Reject any `display_name` or `version` segment that could escape the repos
+/// cache directory via path traversal.
+///
+/// SECURITY: `get_repo_path` joins attacker-influenced strings under
+/// `~/.opensrc/repos` — the repo `display_name` is derived from package
+/// metadata (`repository.url`), and `version`/git-ref is taken verbatim from the
+/// spec after `@`/`#`. Without this check, `fetch vercel/next.js@../../../tmp/evil`
+/// (or a crafted `repository.url` containing `..`) would clone — and later, via
+/// `remove`/`clean`, delete — files OUTSIDE the cache sandbox. Legitimate
+/// slash-bearing branch refs (e.g. `release/1.0`) stay nested INSIDE the cache
+/// and are allowed; only empty, `.`, `..`, or absolute components are rejected.
+fn ensure_safe_path_segment(segment: &str) -> Result<()> {
+    if segment.is_empty() || segment.contains('\0') {
+        return Err(Error::Other(format!(
+            "Unsafe path segment rejected (empty/null): {segment:?}"
+        )));
+    }
+    if segment.starts_with('/')
+        || segment.starts_with('\\')
+        || Path::new(segment).is_absolute()
+    {
+        return Err(Error::Other(format!(
+            "Unsafe path segment rejected (absolute): {segment:?}"
+        )));
+    }
+    for part in segment.split(|c| c == '/' || c == '\\') {
+        if part.is_empty() || part == "." || part == ".." {
+            return Err(Error::Other(format!(
+                "Unsafe path segment rejected (traversal): {segment:?}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub fn get_repo_path(display_name: &str, version: &str) -> Result<PathBuf> {
+    ensure_safe_path_segment(display_name)?;
+    ensure_safe_path_segment(version)?;
     Ok(get_repos_dir()?.join(display_name).join(version))
 }
 
@@ -297,6 +334,38 @@ mod tests {
         assert_eq!(
             get_repo_display_name("https://github.com/colinhacks/zod"),
             Some("github.com/colinhacks/zod".into())
+        );
+    }
+
+    #[test]
+    fn test_get_repo_path_rejects_traversal_in_version() {
+        // SECURITY: a git-ref / version with `..` must not escape cache.
+        assert!(get_repo_path("github.com/vercel/next.js", "../../../../tmp/evil").is_err());
+        assert!(get_repo_path("github.com/vercel/next.js", "..").is_err());
+        assert!(get_repo_path("github.com/vercel/next.js", "a/../../../b").is_err());
+    }
+
+    #[test]
+    fn test_get_repo_path_rejects_traversal_in_display_name() {
+        assert!(get_repo_path("github.com/../../etc", "1.0.0").is_err());
+        assert!(get_repo_path("../../etc", "1.0.0").is_err());
+    }
+
+    #[test]
+    fn test_get_repo_path_rejects_absolute_segment() {
+        assert!(get_repo_path("github.com/vercel/next.js", "/etc/passwd").is_err());
+        assert!(get_repo_path("github.com/vercel/next.js", "").is_err());
+    }
+
+    #[test]
+    fn test_get_repo_path_allows_slashed_branch_ref() {
+        // Legitimate branch refs containing `/` must still work (stay nested).
+        let p = get_repo_path("github.com/vercel/next.js", "release/1.0")
+            .expect("legit slashed ref must be allowed");
+        let s = p.to_string_lossy().replace('\\', "/");
+        assert!(
+            s.contains("repos/github.com/vercel/next.js/release/1.0"),
+            "path stayed inside repos cache: {s}"
         );
     }
 

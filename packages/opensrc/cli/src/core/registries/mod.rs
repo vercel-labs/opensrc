@@ -109,8 +109,29 @@ pub fn resolve_package(spec: &PackageSpec) -> super::error::Result<ResolvedPacka
     }
 }
 
+/// Returns the canonical host for `url` **only** if it is one of our supported
+/// git hosts, matched by exact host equality after parsing — never a substring.
+///
+/// SECURITY: clone-target selection and token injection must gate on this, not
+/// on `url.contains("github.com")`. A substring test treats
+/// `https://github.com.attacker.tld/o/r` as GitHub and would leak the token to
+/// `attacker.tld`. Parsing the URL and comparing `host_str()` for exact
+/// equality closes that hole. Only http(s) URLs are considered git repos.
+pub(crate) fn supported_git_host(url: &str) -> Option<&'static str> {
+    let parsed = url::Url::parse(url).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    match parsed.host_str()? {
+        "github.com" => Some("github.com"),
+        "gitlab.com" => Some("gitlab.com"),
+        "bitbucket.org" => Some("bitbucket.org"),
+        _ => None,
+    }
+}
+
 pub(crate) fn is_git_repo_url(url: &str) -> bool {
-    url.contains("github.com") || url.contains("gitlab.com") || url.contains("bitbucket.org")
+    supported_git_host(url).is_some()
 }
 
 pub(crate) fn normalize_repo_url(url: &str) -> String {
@@ -148,34 +169,42 @@ pub(crate) fn bitbucket_token() -> Option<String> {
         .filter(|t| !t.is_empty())
 }
 
-/// Rewrites an HTTPS clone URL to embed auth credentials when a token is available.
+/// Rewrites an HTTPS clone URL to embed auth credentials when a token is
+/// available. Credentials are embedded **only** when the URL's host is exactly
+/// one of the supported git hosts (parsed, not substring-matched) — see
+/// `supported_git_host` for the security rationale. The `replacen` on the
+/// `https://<host>` prefix is safe here precisely because the host has already
+/// been verified equal to that constant, so it can only rewrite the real host.
 pub fn authenticated_clone_url(url: &str) -> String {
-    if let Some(token) = github_token() {
-        if url.contains("github.com") {
-            return url.replacen(
-                "https://github.com",
-                &format!("https://x-access-token:{token}@github.com"),
-                1,
-            );
+    match supported_git_host(url) {
+        Some("github.com") => {
+            if let Some(token) = github_token() {
+                return url.replacen(
+                    "https://github.com",
+                    &format!("https://x-access-token:{token}@github.com"),
+                    1,
+                );
+            }
         }
-    }
-    if let Some(token) = gitlab_token() {
-        if url.contains("gitlab.com") {
-            return url.replacen(
-                "https://gitlab.com",
-                &format!("https://oauth2:{token}@gitlab.com"),
-                1,
-            );
+        Some("gitlab.com") => {
+            if let Some(token) = gitlab_token() {
+                return url.replacen(
+                    "https://gitlab.com",
+                    &format!("https://oauth2:{token}@gitlab.com"),
+                    1,
+                );
+            }
         }
-    }
-    if let Some(token) = bitbucket_token() {
-        if url.contains("bitbucket.org") {
-            return url.replacen(
-                "https://bitbucket.org",
-                &format!("https://x-token-auth:{token}@bitbucket.org"),
-                1,
-            );
+        Some("bitbucket.org") => {
+            if let Some(token) = bitbucket_token() {
+                return url.replacen(
+                    "https://bitbucket.org",
+                    &format!("https://x-token-auth:{token}@bitbucket.org"),
+                    1,
+                );
+            }
         }
+        _ => {}
     }
     url.to_string()
 }
@@ -201,9 +230,52 @@ pub fn detect_input_type(spec: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    // Serializes the env-var-touching tests below so parallel test threads do
+    // not race on GITHUB_TOKEN.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_is_git_repo_url_github() {
         assert!(is_git_repo_url("https://github.com/owner/repo"));
+    }
+
+    #[test]
+    fn test_is_git_repo_url_rejects_substring_host() {
+        // SECURITY: hosts that merely *contain* a supported host as a substring
+        // must NOT be treated as that host.
+        assert!(!is_git_repo_url("https://github.com.attacker.tld/o/r"));
+        assert!(!is_git_repo_url("https://gitlab.com.evil.example/o/r"));
+        assert!(!is_git_repo_url("https://bitbucket.org.evil.example/o/r"));
+        assert!(!is_git_repo_url("https://notgithub.com/o/r"));
+        assert!(!is_git_repo_url("https://github.com@attacker.tld/o/r"));
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_never_leaks_token_to_attacker_host() {
+        // SECURITY: even WITH a token set, an attacker-controlled host that
+        // contains "github.com" as a substring must never receive it.
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("GITHUB_TOKEN", "ghp_SECRETVALUE_DO_NOT_LEAK");
+        let evil = "https://github.com.attacker.tld/owner/repo";
+        let out = authenticated_clone_url(evil);
+        std::env::remove_var("GITHUB_TOKEN");
+        assert_eq!(out, evil, "URL must be returned unchanged for attacker host");
+        assert!(
+            !out.contains("ghp_SECRETVALUE_DO_NOT_LEAK"),
+            "token must not appear in the clone URL"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_injects_for_exact_github_host() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("GITHUB_TOKEN", "ghp_SECRETVALUE_DO_NOT_LEAK");
+        let out = authenticated_clone_url("https://github.com/owner/repo");
+        std::env::remove_var("GITHUB_TOKEN");
+        assert_eq!(
+            out,
+            "https://x-access-token:ghp_SECRETVALUE_DO_NOT_LEAK@github.com/owner/repo"
+        );
     }
 
     #[test]
