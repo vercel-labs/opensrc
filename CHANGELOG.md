@@ -1,8 +1,25 @@
 # opensrc
 
-## 0.7.2
+## 0.7.3
 
 <!-- release:start -->
+### Bug Fixes
+
+- **Authenticated clone host validation** — Parse clone URLs and require exact GitHub, GitLab, and Bitbucket hosts before adding tokens, preventing host-prefix confusion attacks (#66)
+
+### Improvements
+
+- **Error handling** — Replace ad hoc boxed errors with a typed error model across the CLI, including cache directory resolution that now returns errors instead of exiting directly (#56)
+- **Fetch documentation** — Document `opensrc fetch` in the CLI README and docs commands page (#56)
+- **Docs search and CI** — Include the authentication page in docs search and add docs type-checking to CI (#56)
+
+### Contributors
+
+- @ctate
+<!-- release:end -->
+
+## 0.7.2
+
 ### New Features
 
 - **`opensrc fetch` subcommand** — Cache a package's source without printing paths, for use in scripts and CI where you just want the source downloaded (#53)
@@ -18,7 +35,6 @@
 ### Contributors
 
 - @ctate
-<!-- release:end -->
 
 ## 0.7.1
 
