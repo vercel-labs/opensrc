@@ -101,7 +101,7 @@ The `OPENSRC_HOME` environment variable overrides the default cache location.
 
 ## Development
 
-Requires [Rust](https://rustup.rs) and [Node.js](https://nodejs.org) 18+.
+Requires [Rust](https://rustup.rs) and [Node.js](https://nodejs.org) 24+.
 
 ```bash
 # Build
