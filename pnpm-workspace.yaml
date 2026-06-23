@@ -1,3 +1,10 @@
+minimumReleaseAge: 2880
+
+allowBuilds:
+  "@mongodb-js/zstd": false
+  node-liblzma: false
+  sharp: false
+
 packages:
   - "packages/*"
   - "apps/*"

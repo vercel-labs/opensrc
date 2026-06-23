@@ -30,7 +30,7 @@ find $(opensrc path pypi:requests) -name "*.py"
 
 ## Development
 
-This is a [Turborepo](https://turbo.build) monorepo using [pnpm](https://pnpm.io) workspaces.
+This is a [Turborepo](https://turbo.build) monorepo using [pnpm](https://pnpm.io) workspaces. Use Node.js 24+ and pnpm 11.
 
 ```bash
 pnpm install
