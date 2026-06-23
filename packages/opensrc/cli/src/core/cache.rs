@@ -273,6 +273,9 @@ pub fn now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_parse_repo_url_https() {
@@ -311,6 +314,7 @@ mod tests {
 
     #[test]
     fn test_read_sources_corrupt_json_creates_backup() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
         let tmp = std::env::temp_dir().join("opensrc_test_corrupt");
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
@@ -334,6 +338,7 @@ mod tests {
 
     #[test]
     fn test_read_sources_valid_json() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
         let tmp = std::env::temp_dir().join("opensrc_test_valid");
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();

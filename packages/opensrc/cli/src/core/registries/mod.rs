@@ -109,8 +109,31 @@ pub fn resolve_package(spec: &PackageSpec) -> super::error::Result<ResolvedPacka
     }
 }
 
+const GITHUB_HOST: &str = "github.com";
+const GITLAB_HOST: &str = "gitlab.com";
+const BITBUCKET_HOST: &str = "bitbucket.org";
+
 pub(crate) fn is_git_repo_url(url: &str) -> bool {
-    url.contains("github.com") || url.contains("gitlab.com") || url.contains("bitbucket.org")
+    [GITHUB_HOST, GITLAB_HOST, BITBUCKET_HOST]
+        .iter()
+        .any(|supported| repo_host_matches(url, supported))
+}
+
+fn repo_host_matches(url: &str, expected_host: &str) -> bool {
+    if let Ok(parsed) = url::Url::parse(url) {
+        return parsed
+            .host_str()
+            .is_some_and(|host| host.eq_ignore_ascii_case(expected_host));
+    }
+
+    let Some(rest) = url.strip_prefix("git@") else {
+        return false;
+    };
+    let Some((host, _)) = rest.split_once(':') else {
+        return false;
+    };
+
+    host.eq_ignore_ascii_case(expected_host)
 }
 
 pub(crate) fn normalize_repo_url(url: &str) -> String {
@@ -150,34 +173,64 @@ pub(crate) fn bitbucket_token() -> Option<String> {
 
 /// Rewrites an HTTPS clone URL to embed auth credentials when a token is available.
 pub fn authenticated_clone_url(url: &str) -> String {
-    if let Some(token) = github_token() {
-        if url.contains("github.com") {
-            return url.replacen(
-                "https://github.com",
-                &format!("https://x-access-token:{token}@github.com"),
-                1,
-            );
+    let github = github_token();
+    let gitlab = gitlab_token();
+    let bitbucket = bitbucket_token();
+
+    authenticated_clone_url_with_tokens(
+        url,
+        github.as_deref(),
+        gitlab.as_deref(),
+        bitbucket.as_deref(),
+    )
+}
+
+fn authenticated_clone_url_with_tokens(
+    url: &str,
+    github: Option<&str>,
+    gitlab: Option<&str>,
+    bitbucket: Option<&str>,
+) -> String {
+    if let Some(token) = github {
+        if let Some(authenticated) =
+            authenticated_url_for_host(url, GITHUB_HOST, "x-access-token", token)
+        {
+            return authenticated;
         }
     }
-    if let Some(token) = gitlab_token() {
-        if url.contains("gitlab.com") {
-            return url.replacen(
-                "https://gitlab.com",
-                &format!("https://oauth2:{token}@gitlab.com"),
-                1,
-            );
+    if let Some(token) = gitlab {
+        if let Some(authenticated) = authenticated_url_for_host(url, GITLAB_HOST, "oauth2", token) {
+            return authenticated;
         }
     }
-    if let Some(token) = bitbucket_token() {
-        if url.contains("bitbucket.org") {
-            return url.replacen(
-                "https://bitbucket.org",
-                &format!("https://x-token-auth:{token}@bitbucket.org"),
-                1,
-            );
+    if let Some(token) = bitbucket {
+        if let Some(authenticated) =
+            authenticated_url_for_host(url, BITBUCKET_HOST, "x-token-auth", token)
+        {
+            return authenticated;
         }
     }
     url.to_string()
+}
+
+fn authenticated_url_for_host(
+    url: &str,
+    expected_host: &str,
+    username: &str,
+    token: &str,
+) -> Option<String> {
+    let mut parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "https" {
+        return None;
+    }
+    let host = parsed.host_str()?;
+    if !host.eq_ignore_ascii_case(expected_host) {
+        return None;
+    }
+
+    parsed.set_username(username).ok()?;
+    parsed.set_password(Some(token)).ok()?;
+    Some(parsed.to_string())
 }
 
 pub fn detect_input_type(spec: &str) -> &'static str {
@@ -217,8 +270,132 @@ mod tests {
     }
 
     #[test]
+    fn test_is_git_repo_url_ssh() {
+        assert!(is_git_repo_url("git@github.com:owner/repo.git"));
+    }
+
+    #[test]
     fn test_is_git_repo_url_other() {
         assert!(!is_git_repo_url("https://example.com/owner/repo"));
+    }
+
+    #[test]
+    fn test_is_git_repo_url_rejects_host_prefix_confusion() {
+        assert!(!is_git_repo_url(
+            "https://github.com.attacker.example/owner/repo"
+        ));
+        assert!(!is_git_repo_url(
+            "https://gitlab.com.attacker.example/owner/repo"
+        ));
+        assert!(!is_git_repo_url(
+            "https://bitbucket.org.attacker.example/owner/repo"
+        ));
+        assert!(!is_git_repo_url(
+            "git@github.com.attacker.example:owner/repo.git"
+        ));
+    }
+
+    #[test]
+    fn test_is_git_repo_url_rejects_host_in_path() {
+        assert!(!is_git_repo_url(
+            "https://example.com/github.com/owner/repo"
+        ));
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_github_exact_host() {
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://github.com/owner/repo",
+                Some("TOKEN"),
+                None,
+                None
+            ),
+            "https://x-access-token:TOKEN@github.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_gitlab_exact_host() {
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://gitlab.com/owner/repo",
+                None,
+                Some("TOKEN"),
+                None
+            ),
+            "https://oauth2:TOKEN@gitlab.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_bitbucket_exact_host() {
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://bitbucket.org/owner/repo",
+                None,
+                None,
+                Some("TOKEN")
+            ),
+            "https://x-token-auth:TOKEN@bitbucket.org/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_rejects_host_prefix_confusion() {
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://github.com.attacker.example/owner/repo",
+                Some("TOKEN"),
+                None,
+                None
+            ),
+            "https://github.com.attacker.example/owner/repo"
+        );
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://gitlab.com.attacker.example/owner/repo",
+                None,
+                Some("TOKEN"),
+                None
+            ),
+            "https://gitlab.com.attacker.example/owner/repo"
+        );
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://bitbucket.org.attacker.example/owner/repo",
+                None,
+                None,
+                Some("TOKEN")
+            ),
+            "https://bitbucket.org.attacker.example/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_rejects_host_in_path() {
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "https://example.com/github.com/owner/repo",
+                Some("TOKEN"),
+                None,
+                None
+            ),
+            "https://example.com/github.com/owner/repo"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_clone_url_only_rewrites_https() {
+        assert_eq!(
+            authenticated_clone_url_with_tokens(
+                "http://github.com/owner/repo",
+                Some("TOKEN"),
+                None,
+                None
+            ),
+            "http://github.com/owner/repo"
+        );
     }
 
     #[test]
