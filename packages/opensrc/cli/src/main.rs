@@ -1,5 +1,6 @@
 mod commands;
 mod core;
+mod mcp;
 
 use clap::{Parser, Subcommand};
 
@@ -51,6 +52,8 @@ enum Commands {
         #[arg(required = true)]
         packages: Vec<String>,
     },
+    /// Start an MCP (Model Context Protocol) server over stdio
+    Mcp,
     /// Remove all cached packages and/or repos
     Clean {
         /// Only remove packages (all registries)
@@ -90,6 +93,8 @@ fn main() {
         Some(Commands::List { json }) => commands::list::run(json),
 
         Some(Commands::Remove { packages }) => commands::remove::run(&packages),
+
+        Some(Commands::Mcp) => mcp::run(),
 
         Some(Commands::Clean {
             packages,

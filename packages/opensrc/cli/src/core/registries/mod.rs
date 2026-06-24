@@ -42,6 +42,7 @@ pub struct ResolvedPackage {
     pub repo_url: String,
     pub repo_directory: Option<String>,
     pub git_tag: String,
+    pub version_pinned: bool,
 }
 
 #[derive(Debug, Clone)]

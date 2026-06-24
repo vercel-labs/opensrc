@@ -131,6 +131,7 @@ pub fn resolve_crate(name: &str, version: Option<&str>) -> Result<ResolvedPackag
         repo_url,
         repo_directory: None,
         git_tag,
+        version_pinned: version.is_some(),
     })
 }
 
