@@ -110,10 +110,15 @@ pub fn parse_repo_spec(spec: &str) -> Option<RepoSpec> {
         return None;
     }
 
+    // Strip a trailing `.git` so shorthand, host-prefixed, and bare specs match
+    // the full-URL branch above. Host providers forbid repo names ending in
+    // `.git`, so this is always safe.
+    let repo = parts[1].strip_suffix(".git").unwrap_or(parts[1]);
+
     Some(RepoSpec {
         host,
         owner: parts[0].to_string(),
-        repo: parts[1].to_string(),
+        repo: repo.to_string(),
         git_ref,
     })
 }
@@ -376,6 +381,49 @@ mod tests {
         assert_eq!(spec.owner, "vercel");
         assert_eq!(spec.repo, "next.js");
         assert_eq!(spec.git_ref, Some("canary".into()));
+    }
+
+    #[test]
+    fn test_parse_repo_spec_full_url_strips_git_suffix() {
+        // Regression guard: the full-URL form already strips `.git`.
+        let spec = parse_repo_spec("https://github.com/owner/repo.git").unwrap();
+        assert_eq!(spec.repo, "repo");
+    }
+
+    #[test]
+    fn test_parse_repo_spec_shorthand_strips_git_suffix() {
+        // A `.git`-suffixed clone-URL shorthand must resolve to the same repo
+        // name as the full URL. Previously the `.git` leaked through and the
+        // host API call 404'd on a repository that exists.
+        let spec = parse_repo_spec("github:owner/repo.git").unwrap();
+        assert_eq!(spec.host, "github.com");
+        assert_eq!(spec.owner, "owner");
+        assert_eq!(spec.repo, "repo");
+        assert_eq!(spec.git_ref, None);
+    }
+
+    #[test]
+    fn test_parse_repo_spec_bare_strips_git_suffix() {
+        let spec = parse_repo_spec("owner/repo.git").unwrap();
+        assert_eq!(spec.host, "github.com");
+        assert_eq!(spec.owner, "owner");
+        assert_eq!(spec.repo, "repo");
+    }
+
+    #[test]
+    fn test_parse_repo_spec_host_prefixed_strips_git_suffix() {
+        let spec = parse_repo_spec("gitlab.com/owner/repo.git").unwrap();
+        assert_eq!(spec.host, "gitlab.com");
+        assert_eq!(spec.owner, "owner");
+        assert_eq!(spec.repo, "repo");
+    }
+
+    #[test]
+    fn test_parse_repo_spec_strips_git_suffix_with_ref() {
+        let spec = parse_repo_spec("owner/repo.git@v1.2.3").unwrap();
+        assert_eq!(spec.owner, "owner");
+        assert_eq!(spec.repo, "repo");
+        assert_eq!(spec.git_ref, Some("v1.2.3".into()));
     }
 
     #[test]
