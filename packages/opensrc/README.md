@@ -36,6 +36,7 @@ cat $(opensrc path pypi:flask@3.0.0)/src/flask/app.py
 ```
 
 Options:
+- `--local` — use `.opensrc` inside `--cwd` instead of the global cache
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
 
@@ -49,8 +50,24 @@ opensrc fetch pypi:requests crates:serde vercel/next.js
 ```
 
 Options:
+- `--local` — use `.opensrc` inside `--cwd` instead of the global cache
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--quiet` / `-q` — suppress progress output
+
+### Local project cache
+
+By default, `opensrc` stores sources globally in `~/.opensrc`. Use `--local` when
+an agent should only see sources cached for the current project:
+
+```bash
+opensrc --local fetch zod
+opensrc --local path --cwd ./apps/web zod
+opensrc --local list
+```
+
+For `fetch` and `path`, `--local` stores sources in `--cwd/.opensrc` when
+`--cwd` is provided, otherwise in `./.opensrc`. For `list`, `remove`, and
+`clean`, it reads from `./.opensrc`.
 
 ### List cached sources
 
@@ -98,6 +115,7 @@ opensrc clean --crates   # only crates.io packages
 5. Tracks metadata in `~/.opensrc/sources.json`
 
 The `OPENSRC_HOME` environment variable overrides the default cache location.
+The `--local` flag overrides both and uses a project-local `.opensrc` directory.
 
 ## Development
 

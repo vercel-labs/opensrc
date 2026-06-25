@@ -1,6 +1,7 @@
 mod commands;
 mod core;
 
+use crate::core::cache::get_local_opensrc_dir;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -8,6 +9,10 @@ use clap::{Parser, Subcommand};
 #[command(about = "Fetch source code for packages to give coding agents deeper context")]
 #[command(version)]
 struct Cli {
+    /// Store and read the cache from .opensrc in the working directory
+    #[arg(long, global = true)]
+    local: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -38,7 +43,7 @@ enum Commands {
         #[arg(long)]
         verbose: bool,
     },
-    /// List all globally cached sources
+    /// List all cached sources
     List {
         /// Output as JSON
         #[arg(long)]
@@ -79,17 +84,29 @@ fn main() {
             packages,
             cwd,
             quiet,
-        }) => commands::fetch::run(&packages, cwd.as_deref(), quiet),
+        }) => {
+            configure_cache(cli.local, cwd.as_deref());
+            commands::fetch::run(&packages, cwd.as_deref(), quiet)
+        }
 
         Some(Commands::Path {
             packages,
             cwd,
             verbose,
-        }) => commands::path::run(&packages, cwd.as_deref(), verbose),
+        }) => {
+            configure_cache(cli.local, cwd.as_deref());
+            commands::path::run(&packages, cwd.as_deref(), verbose)
+        }
 
-        Some(Commands::List { json }) => commands::list::run(json),
+        Some(Commands::List { json }) => {
+            configure_cache(cli.local, None);
+            commands::list::run(json)
+        }
 
-        Some(Commands::Remove { packages }) => commands::remove::run(&packages),
+        Some(Commands::Remove { packages }) => {
+            configure_cache(cli.local, None);
+            commands::remove::run(&packages)
+        }
 
         Some(Commands::Clean {
             packages,
@@ -98,6 +115,7 @@ fn main() {
             pypi,
             crates,
         }) => {
+            configure_cache(cli.local, None);
             let registry = if npm {
                 Some(core::registries::Registry::Npm)
             } else if pypi {
@@ -120,5 +138,11 @@ fn main() {
     if let Err(e) = result {
         eprintln!("Error: {e}");
         std::process::exit(1);
+    }
+}
+
+fn configure_cache(local: bool, cwd: Option<&str>) {
+    if local {
+        std::env::set_var("OPENSRC_HOME", get_local_opensrc_dir(cwd.unwrap_or(".")));
     }
 }

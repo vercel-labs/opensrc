@@ -54,6 +54,10 @@ pub fn get_opensrc_dir() -> Result<PathBuf> {
         .ok_or(Error::HomeDirNotFound)
 }
 
+pub fn get_local_opensrc_dir(cwd: &str) -> PathBuf {
+    PathBuf::from(cwd).join(OPENSRC_DIR)
+}
+
 pub fn get_repos_dir() -> Result<PathBuf> {
     Ok(get_opensrc_dir()?.join(REPOS_DIR))
 }
@@ -310,6 +314,14 @@ mod tests {
             "repos/github.com/owner/repo".to_string()
         );
         assert_eq!(extract_repo_base_path("other"), "other".to_string());
+    }
+
+    #[test]
+    fn test_get_local_opensrc_dir_uses_cwd() {
+        assert_eq!(
+            get_local_opensrc_dir("/tmp/project"),
+            PathBuf::from("/tmp/project").join(OPENSRC_DIR)
+        );
     }
 
     #[test]
