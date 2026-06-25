@@ -20,6 +20,7 @@ regex = "1"
 url = "2"
 thiserror = "2"
 urlencoding = "2"
+jsonc-parser = { version = "0.26", features = ["serde"] }
 
 [profile.release]
 opt-level = 3

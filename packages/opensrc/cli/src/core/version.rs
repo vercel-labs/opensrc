@@ -57,6 +57,12 @@ fn version_from_yarn_lock(package_name: &str, cwd: &Path) -> Option<String> {
     parse_yarn_lock(&content, package_name)
 }
 
+fn version_from_bun_lock(package_name: &str, cwd: &Path) -> Option<String> {
+    let path = cwd.join("bun.lock");
+    let content = fs::read_to_string(path).ok()?;
+    parse_bun_lock(&content, package_name)
+}
+
 /// Best-guess fallback: strips range prefixes (^, ~, >=) from package.json
 /// dependency specs. The result may not match an actual published version
 /// (e.g. ^1.0.0 → 1.0.0 when 1.5.3 is installed), but higher-priority
@@ -90,12 +96,13 @@ fn parse_package_json_version(content: &str, package_name: &str) -> Option<Strin
 }
 
 /// Detect the installed version of an npm package from lockfiles and node_modules.
-/// Priority: node_modules > package-lock.json > pnpm-lock.yaml > yarn.lock > package.json
+/// Priority: node_modules > package-lock.json > pnpm-lock.yaml > yarn.lock > bun.lock > package.json
 pub fn detect_installed_version(package_name: &str, cwd: &Path) -> Option<String> {
     version_from_node_modules(package_name, cwd)
         .or_else(|| version_from_package_lock(package_name, cwd))
         .or_else(|| version_from_pnpm_lock(package_name, cwd))
         .or_else(|| version_from_yarn_lock(package_name, cwd))
+        .or_else(|| version_from_bun_lock(package_name, cwd))
         .or_else(|| version_from_package_json(package_name, cwd))
 }
 
@@ -564,6 +571,56 @@ fn parse_yarn_lock(text: &str, pkg: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// bun
+// ---------------------------------------------------------------------------
+
+/// Parse a `bun.lock` text (Bun >= 1.2, the text lockfile that superseded the
+/// binary `bun.lockb`) and return the installed version of `package_name`.
+///
+/// `bun.lock` is JSONC — it permits trailing commas — so it is parsed with a
+/// JSONC-tolerant parser rather than `serde_json` directly.
+///
+/// The top-level `packages` object maps an install key to an array whose first
+/// element is the resolved `"name@version"` descriptor:
+///
+/// ```jsonc
+/// "packages": {
+///   "@scope/pkg": ["@scope/pkg@1.2.3", "<registry>", { /* meta */ }, "<sha>"],
+/// }
+/// ```
+///
+/// For npm aliases the key differs from the resolved package, e.g.
+/// `"@ai-sdk/provider-utils-v6": ["@ai-sdk/provider-utils@4.0.27", ...]`, so the
+/// authoritative `name@version` is read from element `[0]`, not the key. We
+/// match the key against `package_name` (the deduped top-level entry) and then
+/// extract the version from `[0]`.
+fn parse_bun_lock(text: &str, pkg: &str) -> Option<String> {
+    let options = jsonc_parser::ParseOptions {
+        allow_comments: true,
+        allow_loose_object_property_names: true,
+        allow_trailing_commas: true,
+    };
+    let value = jsonc_parser::parse_to_serde_value(text, &options).ok()??;
+
+    let entry = value.get("packages")?.get(pkg)?;
+    // The descriptor is element [0]: "name@version".
+    let descriptor = entry.get(0)?.as_str()?;
+    // Split on the LAST '@' so scoped names ("@scope/pkg@1.2.3") resolve: the
+    // leading '@' of the scope is at index 0 and must not be treated as the
+    // version separator.
+    let at = descriptor.rfind('@')?;
+    if at == 0 {
+        return None; // malformed: "@scope/pkg" with no version
+    }
+    let version = &descriptor[at + 1..];
+    if is_registry_version(version) {
+        Some(version.to_string())
+    } else {
+        None
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1419,5 +1476,90 @@ version \"file:../my-lib\"\n";
     #[test]
     fn package_json_invalid_json_returns_none() {
         assert_eq!(parse_package_json_version("not json", "zod"), None);
+    }
+
+    #[test]
+    fn bun_lock_basic_and_scoped() {
+        // Real-world shape: "packages" maps a key to
+        // [name@version, registry, metadata, integrity], with trailing commas
+        // (JSONC) that a strict JSON parser would reject.
+        let text = r#"{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "myapp",
+      "dependencies": {
+        "foo": "^1.0.0",
+        "@scope/pkg": "1.2.3",
+      },
+    },
+  },
+  "packages": {
+    "foo": ["foo@1.4.2", "", {}, "sha512-abc=="],
+    "@scope/pkg": ["@scope/pkg@1.2.3", "", { "dependencies": {} }, "sha512-def=="],
+    "zod": ["zod@3.25.76", "", {}, "sha512-ghi=="],
+  }
+}"#;
+        assert_eq!(parse_bun_lock(text, "foo"), Some("1.4.2".to_string()));
+        assert_eq!(
+            parse_bun_lock(text, "@scope/pkg"),
+            Some("1.2.3".to_string())
+        );
+        assert_eq!(parse_bun_lock(text, "zod"), Some("3.25.76".to_string()));
+    }
+
+    #[test]
+    fn bun_lock_prefers_resolved_over_workspace_range() {
+        // The workspace block declares the range "^1.0.0"; the packages block
+        // has the resolved "foo@1.4.2". We must return the resolved version.
+        let text = r#"{
+  "lockfileVersion": 1,
+  "workspaces": { "": { "name": "myapp", "dependencies": { "foo": "^1.0.0" } } },
+  "packages": {
+    "foo": ["foo@1.4.2", "", {}, "sha512-abc=="],
+  }
+}"#;
+        assert_eq!(parse_bun_lock(text, "foo"), Some("1.4.2".to_string()));
+    }
+
+    #[test]
+    fn bun_lock_npm_alias_resolves_from_descriptor() {
+        // npm-alias entries: the key differs from the resolved package, and the
+        // authoritative "name@version" lives in element [0].
+        let text = r#"{
+  "packages": {
+    "@ai-sdk/provider-utils-v6": ["@ai-sdk/provider-utils@4.0.27", "", {}, "sha512-x=="],
+  }
+}"#;
+        assert_eq!(
+            parse_bun_lock(text, "@ai-sdk/provider-utils-v6"),
+            Some("4.0.27".to_string())
+        );
+    }
+
+    #[test]
+    fn bun_lock_missing_package_returns_none() {
+        let text = r#"{
+  "packages": {
+    "foo": ["foo@1.0.0", "", {}, "sha512-abc=="],
+  }
+}"#;
+        assert_eq!(parse_bun_lock(text, "bar"), None);
+    }
+
+    #[test]
+    fn bun_lock_no_substring_false_match() {
+        // "foo-bar" must not satisfy a lookup for "foo".
+        let text = r#"{
+  "packages": {
+    "foo-bar": ["foo-bar@9.9.9", "", {}, "sha512-abc=="],
+  }
+}"#;
+        assert_eq!(parse_bun_lock(text, "foo"), None);
+    }
+
+    #[test]
+    fn bun_lock_invalid_returns_none() {
+        assert_eq!(parse_bun_lock("not json at all", "foo"), None);
     }
 }
