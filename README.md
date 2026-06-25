@@ -54,6 +54,10 @@ cd apps/docs
 pnpm dev
 ```
 
+## Related Projects
+
+- **[llms-furl](https://github.com/toyamarinyon/llms-furl)** — Furl `llms-full.txt` into a structured tree of small, searchable files. While opensrc fetches package source code, llms-furl splits monolithic LLM documentation into a Unix-friendly filesystem you can search with `grep`, `find`, and pipes.
+
 ## License
 
 Apache-2.0
