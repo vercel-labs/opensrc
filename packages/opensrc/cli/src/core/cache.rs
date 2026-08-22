@@ -26,7 +26,10 @@ impl LocalCache {
             return Ok(Self { previous: None });
         }
 
-        let base = cwd.map(PathBuf::from).unwrap_or(std::env::current_dir()?);
+        let base = match cwd {
+            Some(cwd) => PathBuf::from(cwd),
+            None => std::env::current_dir()?,
+        };
         let previous = std::env::var("OPENSRC_HOME").ok();
         std::env::set_var("OPENSRC_HOME", base.join(OPENSRC_DIR));
         Ok(Self { previous })
