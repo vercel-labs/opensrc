@@ -22,6 +22,9 @@ enum Commands {
         /// Working directory for lockfile version resolution
         #[arg(long)]
         cwd: Option<String>,
+        /// Store sources in <cwd>/.opensrc instead of the global cache
+        #[arg(long)]
+        local: bool,
         /// Suppress progress output
         #[arg(long, short)]
         quiet: bool,
@@ -34,6 +37,9 @@ enum Commands {
         /// Working directory for lockfile version resolution
         #[arg(long)]
         cwd: Option<String>,
+        /// Store sources in <cwd>/.opensrc instead of the global cache
+        #[arg(long)]
+        local: bool,
         /// Show progress during fetch
         #[arg(long)]
         verbose: bool,
@@ -79,13 +85,15 @@ fn main() {
             packages,
             cwd,
             quiet,
-        }) => commands::fetch::run(&packages, cwd.as_deref(), quiet),
+            local,
+        }) => commands::fetch::run(&packages, cwd.as_deref(), local, quiet),
 
         Some(Commands::Path {
             packages,
             cwd,
             verbose,
-        }) => commands::path::run(&packages, cwd.as_deref(), verbose),
+            local,
+        }) => commands::path::run(&packages, cwd.as_deref(), local, verbose),
 
         Some(Commands::List { json }) => commands::list::run(json),
 

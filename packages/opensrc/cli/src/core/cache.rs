@@ -16,6 +16,33 @@ const OPENSRC_DIR: &str = ".opensrc";
 const REPOS_DIR: &str = "repos";
 const SOURCES_FILE: &str = "sources.json";
 
+pub struct LocalCache {
+    previous: Option<String>,
+}
+
+impl LocalCache {
+    pub fn new(cwd: Option<&str>, local: bool) -> Result<Self> {
+        if !local {
+            return Ok(Self { previous: None });
+        }
+
+        let base = cwd.map(PathBuf::from).unwrap_or(std::env::current_dir()?);
+        let previous = std::env::var("OPENSRC_HOME").ok();
+        std::env::set_var("OPENSRC_HOME", base.join(OPENSRC_DIR));
+        Ok(Self { previous })
+    }
+}
+
+impl Drop for LocalCache {
+    fn drop(&mut self) {
+        if let Some(value) = &self.previous {
+            std::env::set_var("OPENSRC_HOME", value);
+        } else {
+            std::env::remove_var("OPENSRC_HOME");
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageEntry {
     pub name: String,
@@ -356,6 +383,23 @@ mod tests {
 
         assert!(index.packages.is_some());
         assert_eq!(index.packages.unwrap().len(), 1);
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_local_cache_uses_cwd_opensrc_directory() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
+        let tmp = std::env::temp_dir().join("opensrc_test_local_cache");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        std::env::remove_var("OPENSRC_HOME");
+        {
+            let _cache = LocalCache::new(Some(tmp.to_str().unwrap()), true).unwrap();
+            assert_eq!(get_opensrc_dir().unwrap(), tmp.join(OPENSRC_DIR));
+        }
+        assert!(std::env::var("OPENSRC_HOME").is_err());
 
         let _ = fs::remove_dir_all(&tmp);
     }

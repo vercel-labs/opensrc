@@ -1,7 +1,8 @@
 use crate::core::error::{Error, Result};
 use crate::core::fetcher::ensure_cached;
 
-pub fn run(specs: &[String], cwd: Option<&str>, quiet: bool) -> Result<()> {
+pub fn run(specs: &[String], cwd: Option<&str>, local: bool, quiet: bool) -> Result<()> {
+    let _cache = crate::core::cache::LocalCache::new(cwd, local)?;
     let cwd = cwd.unwrap_or(".");
 
     let mut fetched = 0u32;
