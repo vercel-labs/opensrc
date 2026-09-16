@@ -34,8 +34,18 @@ fn stderr_string(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stderr).trim().to_string()
 }
 
-fn clone_at_tag(repo_url: &str, target: &Path, version: &str) -> CloneResult {
-    let tags = [format!("v{version}"), version.to_string()];
+fn clone_at_tag(
+    repo_url: &str,
+    target: &Path,
+    version: &str,
+    name: Option<&str>,
+    allow_fallback: bool,
+) -> CloneResult {
+    let mut tags = vec![format!("v{version}"), version.to_string()];
+    if let Some(n) = name {
+        tags.insert(0, format!("{n}@v{version}"));
+        tags.insert(1, format!("{n}@{version}"));
+    }
     let target_str = target.to_string_lossy();
 
     for tag in &tags {
@@ -62,6 +72,16 @@ fn clone_at_tag(repo_url: &str, target: &Path, version: &str) -> CloneResult {
                 continue;
             }
         }
+    }
+
+    if !allow_fallback {
+        let tried = tags.join(", ");
+        return CloneResult {
+            success: false,
+            error: Some(format!(
+                "No git tag found for version {version} (tried: {tried})"
+            )),
+        };
     }
 
     let output = git_clone_output(&["clone", "--depth", "1", repo_url, &target_str]);
@@ -182,7 +202,13 @@ pub fn fetch_source(resolved: &ResolvedPackage) -> Result<FetchResult> {
     }
 
     let clone_url = authenticated_clone_url(&resolved.repo_url);
-    let clone = clone_at_tag(&clone_url, &repo_path, &resolved.version);
+    let clone = clone_at_tag(
+        &clone_url,
+        &repo_path,
+        &resolved.version,
+        Some(&resolved.name),
+        !resolved.version_pinned,
+    );
 
     if !clone.success {
         return Ok(FetchResult {

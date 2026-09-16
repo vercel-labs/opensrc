@@ -81,4 +81,35 @@ rg "pattern" $(opensrc path crates:<package>)
 rg "pattern" $(opensrc path <owner>/<repo>)
 ```
 
+### MCP Server
+
+opensrc can run as an MCP (Model Context Protocol) server, exposing its tools directly to AI agents without shell wrappers.
+
+Start the server:
+
+```bash
+opensrc mcp
+```
+
+Configure in Cursor (`.cursor/mcp.json`) or Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "opensrc": {
+      "command": "opensrc",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Available tools:
+
+- **opensrc_fetch** — Fetch source code for packages into the local cache
+- **opensrc_path** — Get the absolute path to a cached package's source (fetches on cache miss)
+- **opensrc_list** — List all cached sources as JSON
+- **opensrc_remove** — Remove cached source code for specific packages
+- **opensrc_clean** — Remove all cached packages and/or repos
+
 <!-- opensrc:end -->

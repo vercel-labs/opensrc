@@ -133,6 +133,7 @@ pub fn resolve_pypi_package(name: &str, version: Option<&str>) -> Result<Resolve
         repo_url,
         repo_directory: None,
         git_tag,
+        version_pinned: version.is_some(),
     })
 }
 
