@@ -12,10 +12,34 @@ static RE_SCOPED_PKG: LazyLock<regex::Regex> =
 
 const NPM_REGISTRY: &str = "https://registry.npmjs.org";
 
+// `package.json` accepts `repository` as either an object (`{ url, directory, ... }`)
+// or a string shorthand (e.g. `"https://github.com/owner/repo.git"` or `"owner/repo"`).
+// The npm registry preserves whichever shape was published, so we must accept both
+// to decode the package-level metadata response.
 #[derive(Deserialize)]
-struct NpmRepository {
-    url: Option<String>,
-    directory: Option<String>,
+#[serde(untagged)]
+enum NpmRepository {
+    Object {
+        url: Option<String>,
+        directory: Option<String>,
+    },
+    Shorthand(String),
+}
+
+impl NpmRepository {
+    fn url(&self) -> Option<&str> {
+        match self {
+            NpmRepository::Object { url, .. } => url.as_deref(),
+            NpmRepository::Shorthand(s) => Some(s.as_str()),
+        }
+    }
+
+    fn directory(&self) -> Option<&str> {
+        match self {
+            NpmRepository::Object { directory, .. } => directory.as_deref(),
+            NpmRepository::Shorthand(_) => None,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -88,7 +112,7 @@ fn extract_repo_url(
     version_repo: Option<&NpmRepository>,
 ) -> Option<(String, Option<String>)> {
     let repo = version_repo.or(top_repo)?;
-    let raw = repo.url.as_deref()?;
+    let raw = repo.url()?;
 
     let url = raw
         .trim_start_matches("git+")
@@ -104,7 +128,7 @@ fn extract_repo_url(
         url
     };
 
-    Some((url, repo.directory.clone()))
+    Some((url, repo.directory().map(String::from)))
 }
 
 pub fn resolve_npm_package(name: &str, version: Option<&str>) -> Result<ResolvedPackage> {
@@ -202,5 +226,65 @@ mod tests {
     fn test_npm_registry_url_scoped() {
         let url = npm_registry_url("@babel/core");
         assert_eq!(url, "https://registry.npmjs.org/%40babel%2Fcore");
+    }
+
+    #[test]
+    fn test_npm_repository_decodes_object_form() {
+        let repo: NpmRepository = serde_json::from_str(
+            r#"{"type":"git","url":"git+https://github.com/owner/repo.git","directory":"packages/foo"}"#,
+        )
+        .unwrap();
+        assert_eq!(repo.url(), Some("git+https://github.com/owner/repo.git"));
+        assert_eq!(repo.directory(), Some("packages/foo"));
+    }
+
+    #[test]
+    fn test_npm_repository_decodes_string_shorthand() {
+        // Regression: next-auth versions 3.29.3 and 3.29.7 ship `repository` as a
+        // plain string. Previously, this caused the entire registry response to
+        // fail decoding with `error decoding response body`. See issue #61.
+        let repo: NpmRepository =
+            serde_json::from_str(r#""https://github.com/owner/repo.git""#).unwrap();
+        assert_eq!(repo.url(), Some("https://github.com/owner/repo.git"));
+        assert_eq!(repo.directory(), None);
+    }
+
+    #[test]
+    fn test_npm_response_decodes_with_mixed_repository_shapes() {
+        // Exercises the exact shape that broke `opensrc path next-auth`: a
+        // registry response where some versions use the object form and others
+        // use the string shorthand.
+        let body = r#"{
+            "dist-tags": { "latest": "5.0.0" },
+            "repository": { "type": "git", "url": "https://github.com/owner/repo.git" },
+            "versions": {
+                "5.0.0": { "repository": { "url": "https://github.com/owner/repo.git" } },
+                "3.29.7": { "repository": "https://github.com/owner/repo.git" },
+                "3.29.3": { "repository": "https://github.com/owner/repo.git" },
+                "1.0.0": {}
+            }
+        }"#;
+        let resp: NpmResponse = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            resp.dist_tags.get("latest").map(String::as_str),
+            Some("5.0.0")
+        );
+        assert_eq!(resp.versions.len(), 4);
+        assert!(resp.versions["1.0.0"].repository.is_none());
+        assert_eq!(
+            resp.versions["3.29.7"]
+                .repository
+                .as_ref()
+                .and_then(|r| r.url()),
+            Some("https://github.com/owner/repo.git")
+        );
+    }
+
+    #[test]
+    fn test_extract_repo_url_handles_string_shorthand() {
+        let repo = NpmRepository::Shorthand("git+https://github.com/owner/repo.git".to_string());
+        let (url, dir) = extract_repo_url(None, Some(&repo)).expect("should resolve");
+        assert_eq!(url, "https://github.com/owner/repo");
+        assert_eq!(dir, None);
     }
 }
