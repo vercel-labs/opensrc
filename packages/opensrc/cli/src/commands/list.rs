@@ -14,6 +14,7 @@ pub fn run(json: bool) -> Result<()> {
         println!("  • npm:      opensrc fetch zod, opensrc fetch npm:react");
         println!("  • PyPI:     opensrc fetch pypi:requests");
         println!("  • crates:   opensrc fetch crates:serde");
+        println!("  • RubyGems: opensrc fetch gem:rails");
         return Ok(());
     }
 
@@ -23,7 +24,12 @@ pub fn run(json: bool) -> Result<()> {
         return Ok(());
     }
 
-    let registries = [Registry::Npm, Registry::PyPI, Registry::Crates];
+    let registries = [
+        Registry::Npm,
+        Registry::PyPI,
+        Registry::Crates,
+        Registry::RubyGems,
+    ];
     let mut displayed_packages = false;
 
     for registry in &registries {
