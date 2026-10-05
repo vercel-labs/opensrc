@@ -148,6 +148,12 @@ pub(crate) fn normalize_repo_url(url: &str) -> String {
         .to_string()
 }
 
+/// Blocking HTTP client for registry and git-host APIs.
+///
+/// Trust anchors are the union of the OS certificate store (`rustls-tls-native-roots`)
+/// and the bundled Mozilla roots (`rustls-tls-webpki-roots`). A corporate proxy CA
+/// installed in the OS store is trusted the same way `curl` trusts it. When that
+/// store is missing or empty, the Mozilla roots still allow HTTPS.
 pub(crate) fn http_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -436,5 +442,244 @@ mod tests {
             normalize_repo_url("https://github.com/owner/repo"),
             "https://github.com/owner/repo"
         );
+    }
+
+    /// A CA that exists only in `SSL_CERT_FILE` (the OpenSSL/OS trust input used by
+    /// `rustls-native-certs` on every platform) must be accepted. The bundled Mozilla
+    /// roots do not contain this CA, so this fails when the client is built with
+    /// `rustls-tls-webpki-roots` alone.
+    #[test]
+    fn http_client_trusts_os_certificate_store() {
+        use std::io::{BufRead, BufReader, Read};
+        use std::path::{Path, PathBuf};
+        use std::process::{Child, Command, Stdio};
+        use std::sync::Mutex;
+
+        struct TempDir(PathBuf);
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        struct ChildGuard(Child);
+        impl Drop for ChildGuard {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        struct RestoreEnv {
+            file: Option<std::ffi::OsString>,
+            dir: Option<std::ffi::OsString>,
+        }
+        impl Drop for RestoreEnv {
+            fn drop(&mut self) {
+                restore_env("SSL_CERT_FILE", self.file.take());
+                restore_env("SSL_CERT_DIR", self.dir.take());
+            }
+        }
+
+        fn restore_env(key: &str, value: Option<std::ffi::OsString>) {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+
+        fn with_ssl_cert_file<T>(file: Option<&Path>, body: impl FnOnce() -> T) -> T {
+            static LOCK: Mutex<()> = Mutex::new(());
+            let _lock = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+            let restore = RestoreEnv {
+                file: std::env::var_os("SSL_CERT_FILE"),
+                dir: std::env::var_os("SSL_CERT_DIR"),
+            };
+            match file {
+                Some(path) => std::env::set_var("SSL_CERT_FILE", path),
+                None => std::env::remove_var("SSL_CERT_FILE"),
+            }
+            // rustls-native-certs loads SSL_CERT_DIR in addition to SSL_CERT_FILE.
+            std::env::remove_var("SSL_CERT_DIR");
+            let result = body();
+            drop(restore);
+            result
+        }
+
+        fn openssl(dir: &Path, args: &[&str]) {
+            let output = Command::new("openssl")
+                .args(args)
+                .current_dir(dir)
+                .output()
+                .expect("openssl is required to generate the test CA");
+            assert!(
+                output.status.success(),
+                "openssl {args:?} failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        fn error_chain(err: &dyn std::error::Error) -> String {
+            let mut parts = vec![err.to_string()];
+            let mut source = err.source();
+            while let Some(inner) = source {
+                parts.push(inner.to_string());
+                source = inner.source();
+            }
+            parts.join("\n")
+        }
+
+        let dir = TempDir(std::env::temp_dir().join(format!("opensrc-tls-{}", std::process::id())));
+        std::fs::create_dir_all(&dir.0).unwrap();
+
+        openssl(
+            &dir.0,
+            &[
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-sha256",
+                "-days",
+                "1",
+                "-nodes",
+                "-keyout",
+                "ca.key",
+                "-out",
+                "ca.crt",
+                "-subj",
+                "/CN=opensrc-test-ca",
+                "-addext",
+                "basicConstraints=critical,CA:TRUE",
+                "-addext",
+                "keyUsage=critical,keyCertSign,cRLSign",
+            ],
+        );
+        openssl(
+            &dir.0,
+            &[
+                "req",
+                "-newkey",
+                "rsa:2048",
+                "-sha256",
+                "-nodes",
+                "-keyout",
+                "server.key",
+                "-out",
+                "server.csr",
+                "-subj",
+                "/CN=localhost",
+            ],
+        );
+        std::fs::write(
+            dir.0.join("server.ext"),
+            "basicConstraints=CA:FALSE\n\
+             keyUsage=digitalSignature,keyEncipherment\n\
+             extendedKeyUsage=serverAuth\n\
+             subjectAltName=IP:127.0.0.1,DNS:localhost\n",
+        )
+        .unwrap();
+        openssl(
+            &dir.0,
+            &[
+                "x509",
+                "-req",
+                "-in",
+                "server.csr",
+                "-CA",
+                "ca.crt",
+                "-CAkey",
+                "ca.key",
+                "-CAcreateserial",
+                "-out",
+                "server.crt",
+                "-days",
+                "1",
+                "-sha256",
+                "-extfile",
+                "server.ext",
+            ],
+        );
+
+        let script = dir.0.join("server.py");
+        std::fs::write(
+            &script,
+            r#"import http.server
+import ssl
+import sys
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b"ok"
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        return
+
+server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.minimum_version = ssl.TLSVersion.TLSv1_2
+context.load_cert_chain(sys.argv[1], sys.argv[2])
+server.socket = context.wrap_socket(server.socket, server_side=True)
+print(server.server_address[1], flush=True)
+while True:
+    try:
+        server.handle_request()
+    except Exception:
+        continue
+"#,
+        )
+        .unwrap();
+
+        let mut child = ChildGuard(
+            Command::new("python3")
+                .arg("-u")
+                .arg(&script)
+                .arg(dir.0.join("server.crt"))
+                .arg(dir.0.join("server.key"))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("python3 is required to serve the test certificate"),
+        );
+        let mut stdout = BufReader::new(child.0.stdout.take().unwrap());
+        let mut port_line = String::new();
+        let read = stdout.read_line(&mut port_line).expect("read server port");
+        if read == 0 {
+            let mut stderr = String::new();
+            if let Some(mut err) = child.0.stderr.take() {
+                let _ = err.read_to_string(&mut stderr);
+            }
+            panic!("HTTPS test server did not report a port: {stderr}");
+        }
+        let port: u16 = port_line
+            .trim()
+            .parse()
+            .unwrap_or_else(|_| panic!("invalid port from test server: {port_line:?}"));
+        let url = format!("https://127.0.0.1:{port}/");
+
+        let untrusted = with_ssl_cert_file(None, || http_client().get(&url).send());
+        let untrusted =
+            untrusted.expect_err("custom CA must be rejected when it is not in the OS store");
+        let untrusted_text = error_chain(&untrusted);
+        assert!(
+            untrusted_text.to_ascii_lowercase().contains("certificate"),
+            "expected a certificate verification error, got {untrusted_text}"
+        );
+
+        let trusted = with_ssl_cert_file(Some(&dir.0.join("ca.crt")), || {
+            http_client().get(&url).send()
+        });
+        let trusted = trusted.unwrap_or_else(|err| {
+            panic!(
+                "OS trust store should accept the test CA: {}",
+                error_chain(&err)
+            )
+        });
+        assert!(trusted.status().is_success());
+        assert_eq!(trusted.text().unwrap(), "ok");
     }
 }
