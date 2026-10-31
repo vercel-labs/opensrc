@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::core::error::{Error, Result};
+
 use super::{is_git_repo_url, normalize_repo_url, Registry, ResolvedPackage};
 
 const GO_PROXY: &str = "https://proxy.golang.org";
@@ -30,18 +32,34 @@ pub fn parse_go_spec(spec: &str) -> (String, Option<String>) {
     (spec.trim().to_string(), None)
 }
 
+/// Apply the module proxy's case encoding: each uppercase ASCII letter becomes
+/// `!` followed by its lowercase form, so `github.com/Azure/x` is requested as
+/// `github.com/!azure/x`. Module paths and versions both use this encoding.
+fn escape_proxy_path(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if ch.is_ascii_uppercase() {
+            escaped.push('!');
+            escaped.push(ch.to_ascii_lowercase());
+        } else {
+            escaped.push(ch);
+        }
+    }
+    escaped
+}
+
 fn module_url(module: &str, version: Option<&str>) -> String {
-    let encoded = module.to_lowercase();
+    let encoded = escape_proxy_path(module);
     match version {
-        Some(v) => format!("{GO_PROXY}/{encoded}/@v/{v}.info"),
+        Some(v) => {
+            let encoded_version = escape_proxy_path(v);
+            format!("{GO_PROXY}/{encoded}/@v/{encoded_version}.info")
+        }
         None => format!("{GO_PROXY}/{encoded}/@latest"),
     }
 }
 
-fn fetch_module_info(
-    module: &str,
-    version: Option<&str>,
-) -> Result<GoModuleInfo, Box<dyn std::error::Error>> {
+fn fetch_module_info(module: &str, version: Option<&str>) -> Result<GoModuleInfo> {
     let url = module_url(module, version);
 
     let client = super::http_client();
@@ -51,10 +69,16 @@ fn fetch_module_info(
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(format!("Module \"{module}\" not found on Go module proxy").into());
+        return Err(Error::PackageNotFound {
+            name: module.to_string(),
+            registry: "Go module proxy".to_string(),
+        });
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch module info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "module info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     Ok(resp.json()?)
@@ -109,18 +133,15 @@ fn extract_repo_url(info: &GoModuleInfo, module: &str) -> Option<String> {
     repo_url_from_module_path(module)
 }
 
-pub fn resolve_go_module(
-    module: &str,
-    version: Option<&str>,
-) -> Result<ResolvedPackage, Box<dyn std::error::Error>> {
+pub fn resolve_go_module(module: &str, version: Option<&str>) -> Result<ResolvedPackage> {
     let info = fetch_module_info(module, version)?;
     let resolved_version = info.version.clone();
 
     let repo_url = extract_repo_url(&info, module).ok_or_else(|| {
-        format!(
+        Error::NoRepoUrl(format!(
             "No repository URL found for \"{module}@{resolved_version}\". \
              Could not resolve the module path to a git repository."
-        )
+        ))
     })?;
 
     let git_tag = resolved_version.clone();
@@ -158,6 +179,30 @@ mod tests {
         let (name, version) = parse_go_spec("github.com/gin-gonic/gin@v1.9.0");
         assert_eq!(name, "github.com/gin-gonic/gin");
         assert_eq!(version, Some("v1.9.0".into()));
+    }
+
+    #[test]
+    fn test_module_url_case_encodes_uppercase_path() {
+        assert_eq!(
+            module_url("github.com/Azure/azure-sdk-for-go", None),
+            "https://proxy.golang.org/github.com/!azure/azure-sdk-for-go/@latest"
+        );
+    }
+
+    #[test]
+    fn test_module_url_case_encodes_version() {
+        assert_eq!(
+            module_url("github.com/BurntSushi/toml", Some("v1.0.0-RC1")),
+            "https://proxy.golang.org/github.com/!burnt!sushi/toml/@v/v1.0.0-!r!c1.info"
+        );
+    }
+
+    #[test]
+    fn test_module_url_leaves_lowercase_path_unchanged() {
+        assert_eq!(
+            module_url("golang.org/x/tools", Some("v0.43.0")),
+            "https://proxy.golang.org/golang.org/x/tools/@v/v0.43.0.info"
+        );
     }
 
     #[test]
