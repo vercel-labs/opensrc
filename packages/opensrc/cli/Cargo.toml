@@ -1,6 +1,6 @@
 [package]
 name = "opensrc"
-version = "0.7.1"
+version = "0.7.3"
 edition = "2021"
 description = "Fetch source code for packages to give coding agents deeper context"
 license = "Apache-2.0"
@@ -18,6 +18,7 @@ dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 url = "2"
+thiserror = "2"
 urlencoding = "2"
 
 [profile.release]

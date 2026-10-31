@@ -39,6 +39,19 @@ Options:
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
 
+### Fetch source code
+
+Pre-fetch one or more packages or repos into the cache without printing paths:
+
+```bash
+opensrc fetch zod
+opensrc fetch pypi:requests crates:serde vercel/next.js
+```
+
+Options:
+- `--cwd <path>` — working directory for lockfile version resolution
+- `--quiet` / `-q` — suppress progress output
+
 ### List cached sources
 
 ```bash
@@ -74,6 +87,7 @@ opensrc clean --crates   # only crates.io packages
 | crates.io | `crates:`, `cargo:`, `rust:` | `opensrc path crates:serde` |
 | GitHub | `owner/repo` or URL | `opensrc path vercel/next.js` |
 | GitLab | `gitlab:` or URL | `opensrc path gitlab:owner/repo` |
+| Bitbucket | `bitbucket:` or URL | `opensrc path bitbucket:owner/repo` |
 
 ## How It Works
 
@@ -87,7 +101,7 @@ The `OPENSRC_HOME` environment variable overrides the default cache location.
 
 ## Development
 
-Requires [Rust](https://rustup.rs) and [Node.js](https://nodejs.org) 18+.
+Requires [Rust](https://rustup.rs) and [Node.js](https://nodejs.org) 24+.
 
 ```bash
 # Build

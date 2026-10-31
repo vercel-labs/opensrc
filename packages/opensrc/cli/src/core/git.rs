@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use super::cache::{get_repo_display_name, get_repo_path, get_repo_relative_path};
+use super::error::{Error, Result};
 use super::registries::repo::ResolvedRepo;
 use super::registries::{authenticated_clone_url, Registry, ResolvedPackage};
 
@@ -151,39 +152,29 @@ fn remove_git_dir(repo_path: &Path) {
     }
 }
 
-pub fn fetch_source(resolved: &ResolvedPackage) -> FetchResult {
-    let display_name = match get_repo_display_name(&resolved.repo_url) {
-        Some(n) => n,
-        None => {
-            return FetchResult {
-                package: resolved.name.clone(),
-                version: resolved.version.clone(),
-                path: String::new(),
-                success: false,
-                error: Some(format!(
-                    "Could not parse repository URL: {}",
-                    resolved.repo_url
-                )),
-                registry: Some(resolved.registry),
-            }
-        }
-    };
+pub fn fetch_source(resolved: &ResolvedPackage) -> Result<FetchResult> {
+    let display_name = get_repo_display_name(&resolved.repo_url).ok_or_else(|| {
+        Error::Other(format!(
+            "Could not parse repository URL: {}",
+            resolved.repo_url
+        ))
+    })?;
 
-    let repo_path = get_repo_path(&display_name, &resolved.version);
+    let repo_path = get_repo_path(&display_name, &resolved.version)?;
 
     if repo_path.exists() {
         let mut rel = get_repo_relative_path(&display_name, &resolved.version);
         if let Some(ref dir) = resolved.repo_directory {
             rel = format!("{rel}/{dir}");
         }
-        return FetchResult {
+        return Ok(FetchResult {
             package: resolved.name.clone(),
             version: resolved.version.clone(),
             path: rel,
             success: true,
             error: None,
             registry: Some(resolved.registry),
-        };
+        });
     }
 
     if let Some(parent) = repo_path.parent() {
@@ -194,14 +185,14 @@ pub fn fetch_source(resolved: &ResolvedPackage) -> FetchResult {
     let clone = clone_at_tag(&clone_url, &repo_path, &resolved.version);
 
     if !clone.success {
-        return FetchResult {
+        return Ok(FetchResult {
             package: resolved.name.clone(),
             version: resolved.version.clone(),
             path: get_repo_relative_path(&display_name, &resolved.version),
             success: false,
             error: clone.error,
             registry: Some(resolved.registry),
-        };
+        });
     }
 
     remove_git_dir(&repo_path);
@@ -211,28 +202,28 @@ pub fn fetch_source(resolved: &ResolvedPackage) -> FetchResult {
         rel = format!("{rel}/{dir}");
     }
 
-    FetchResult {
+    Ok(FetchResult {
         package: resolved.name.clone(),
         version: resolved.version.clone(),
         path: rel,
         success: true,
         error: clone.error,
         registry: Some(resolved.registry),
-    }
+    })
 }
 
-pub fn fetch_repo_source(resolved: &ResolvedRepo) -> FetchResult {
-    let repo_path = get_repo_path(&resolved.display_name, &resolved.git_ref);
+pub fn fetch_repo_source(resolved: &ResolvedRepo) -> Result<FetchResult> {
+    let repo_path = get_repo_path(&resolved.display_name, &resolved.git_ref)?;
 
     if repo_path.exists() {
-        return FetchResult {
+        return Ok(FetchResult {
             package: resolved.display_name.clone(),
             version: resolved.git_ref.clone(),
             path: get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
             success: true,
             error: None,
             registry: None,
-        };
+        });
     }
 
     if let Some(parent) = repo_path.parent() {
@@ -243,24 +234,24 @@ pub fn fetch_repo_source(resolved: &ResolvedRepo) -> FetchResult {
     let clone = clone_at_ref(&clone_url, &repo_path, &resolved.git_ref);
 
     if !clone.success {
-        return FetchResult {
+        return Ok(FetchResult {
             package: resolved.display_name.clone(),
             version: resolved.git_ref.clone(),
             path: get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
             success: false,
             error: clone.error,
             registry: None,
-        };
+        });
     }
 
     remove_git_dir(&repo_path);
 
-    FetchResult {
+    Ok(FetchResult {
         package: resolved.display_name.clone(),
         version: resolved.git_ref.clone(),
         path: get_repo_relative_path(&resolved.display_name, &resolved.git_ref),
         success: true,
         error: clone.error,
         registry: None,
-    }
+    })
 }

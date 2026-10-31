@@ -2,6 +2,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "": "Source Code for\nAI Coding Agents",
   registries: "Registries",
   commands: "Commands",
+  auth: "Authentication",
   "how-it-works": "How It Works",
 };
 

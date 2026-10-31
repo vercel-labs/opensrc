@@ -1,5 +1,12 @@
 # opensrc
 
+<p>
+  <a href="https://vercel.com/labs#active-experiments"><img alt="Vercel Labs Experiment" src="https://img.shields.io/badge/LABS-EXPERIMENT-0a0a0a.svg?style=for-the-badge&amp;logo=Vercel&amp;labelColor=000000" height="28"></a>
+  <a href="https://www.npmjs.com/package/opensrc"><img alt="npm version: opensrc" src="https://img.shields.io/npm/v/opensrc.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
+  <a href="https://github.com/vercel-labs/opensrc/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/vercel-labs/opensrc.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
+  <a href="https://www.npmjs.com/package/opensrc"><img alt="npm downloads per month: opensrc" src="https://img.shields.io/npm/dm/opensrc.svg?style=for-the-badge&amp;labelColor=000000&amp;label=npm%20downloads" height="28"></a>
+</p>
+
 Give coding agents access to any package's source code.
 
 ## Quick Start
@@ -30,7 +37,7 @@ find $(opensrc path pypi:requests) -name "*.py"
 
 ## Development
 
-This is a [Turborepo](https://turbo.build) monorepo using [pnpm](https://pnpm.io) workspaces.
+This is a [Turborepo](https://turbo.build) monorepo using [pnpm](https://pnpm.io) workspaces. Use Node.js 24+ and pnpm 11.
 
 ```bash
 pnpm install

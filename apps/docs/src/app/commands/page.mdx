@@ -1,5 +1,21 @@
 # Commands
 
+## fetch
+
+Fetch source code for one or more packages or repos into the cache. Unlike `path`, this command does not print paths — it's designed for pre-populating the cache:
+
+```bash
+opensrc fetch zod
+opensrc fetch pypi:requests crates:serde vercel/next.js
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--cwd <path>` | Working directory for lockfile version resolution |
+| `--quiet` / `-q` | Suppress progress output |
+
 ## path
 
 Print the absolute path to a package's source code, fetching automatically on cache miss. This is the primary command for using opensrc — compose it with any shell tool:

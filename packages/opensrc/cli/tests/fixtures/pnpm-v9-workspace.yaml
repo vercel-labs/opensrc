@@ -1,0 +1,135 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^5.0.0
+        version: 5.3.3
+
+  apps/web:
+    dependencies:
+      next:
+        specifier: ^14.0.0
+        version: 14.0.0(react@18.2.0)(react-dom@18.2.0(react@18.2.0))
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.2.0(react@18.2.0)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.2.45
+
+  apps/legacy:
+    dependencies:
+      react:
+        specifier: ^17.0.0
+        version: 17.0.2
+      react-dom:
+        specifier: ^17.0.0
+        version: 17.0.2(react@17.0.2)
+
+packages:
+
+  '@types/react@18.2.45':
+    resolution: {integrity: sha512-FAKE}
+
+  js-tokens@4.0.0:
+    resolution: {integrity: sha512-FAKE}
+
+  loose-envify@1.4.0:
+    resolution: {integrity: sha512-FAKE}
+    hasBin: true
+
+  next@14.0.0:
+    resolution: {integrity: sha512-FAKE}
+    peerDependencies:
+      react: ^18.2.0
+      react-dom: ^18.2.0
+
+  object-assign@4.1.1:
+    resolution: {integrity: sha512-FAKE}
+
+  react-dom@17.0.2:
+    resolution: {integrity: sha512-FAKE}
+    peerDependencies:
+      react: 17.0.2
+
+  react-dom@18.2.0:
+    resolution: {integrity: sha512-FAKE}
+    peerDependencies:
+      react: ^18.2.0
+
+  react@17.0.2:
+    resolution: {integrity: sha512-FAKE}
+
+  react@18.2.0:
+    resolution: {integrity: sha512-FAKE}
+
+  scheduler@0.20.2:
+    resolution: {integrity: sha512-FAKE}
+
+  scheduler@0.23.0:
+    resolution: {integrity: sha512-FAKE}
+
+  typescript@5.3.3:
+    resolution: {integrity: sha512-FAKE}
+    hasBin: true
+
+snapshots:
+
+  '@types/react@18.2.45': {}
+
+  js-tokens@4.0.0: {}
+
+  loose-envify@1.4.0:
+    dependencies:
+      js-tokens: 4.0.0
+
+  next@14.0.0(react@18.2.0)(react-dom@18.2.0(react@18.2.0)):
+    dependencies:
+      react: 18.2.0
+      react-dom: 18.2.0(react@18.2.0)
+
+  object-assign@4.1.1: {}
+
+  react-dom@17.0.2(react@17.0.2):
+    dependencies:
+      loose-envify: 1.4.0
+      object-assign: 4.1.1
+      react: 17.0.2
+      scheduler: 0.20.2
+
+  react-dom@18.2.0(react@18.2.0):
+    dependencies:
+      loose-envify: 1.4.0
+      react: 18.2.0
+      scheduler: 0.23.0
+
+  react@17.0.2:
+    dependencies:
+      loose-envify: 1.4.0
+      object-assign: 4.1.1
+
+  react@18.2.0:
+    dependencies:
+      loose-envify: 1.4.0
+
+  scheduler@0.20.2:
+    dependencies:
+      loose-envify: 1.4.0
+      object-assign: 4.1.1
+
+  scheduler@0.23.0:
+    dependencies:
+      loose-envify: 1.4.0
+
+  typescript@5.3.3: {}

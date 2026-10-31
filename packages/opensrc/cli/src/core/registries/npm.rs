@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
+use crate::core::error::{Error, Result};
+
 use super::{Registry, ResolvedPackage};
 
 static RE_SCOPED_PKG: LazyLock<regex::Regex> =
@@ -56,7 +58,7 @@ fn npm_registry_url(name: &str) -> String {
     format!("{NPM_REGISTRY}/{encoded}")
 }
 
-fn fetch_npm_info(name: &str) -> Result<NpmResponse, Box<dyn std::error::Error>> {
+fn fetch_npm_info(name: &str) -> Result<NpmResponse> {
     let url = npm_registry_url(name);
 
     let client = super::http_client();
@@ -66,10 +68,16 @@ fn fetch_npm_info(name: &str) -> Result<NpmResponse, Box<dyn std::error::Error>>
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(format!("Package \"{name}\" not found on npm").into());
+        return Err(Error::PackageNotFound {
+            name: name.to_string(),
+            registry: "npm".to_string(),
+        });
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch package info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "package info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     Ok(resp.json()?)
@@ -99,10 +107,7 @@ fn extract_repo_url(
     Some((url, repo.directory.clone()))
 }
 
-pub fn resolve_npm_package(
-    name: &str,
-    version: Option<&str>,
-) -> Result<ResolvedPackage, Box<dyn std::error::Error>> {
+pub fn resolve_npm_package(name: &str, version: Option<&str>) -> Result<ResolvedPackage> {
     let info = fetch_npm_info(name)?;
 
     let resolved_version = match version {
@@ -110,7 +115,9 @@ pub fn resolve_npm_package(
         None => info
             .dist_tags
             .get("latest")
-            .ok_or_else(|| format!("No latest version found for \"{name}\""))?
+            .ok_or_else(|| {
+                Error::VersionNotFound(format!("No latest version found for \"{name}\""))
+            })?
             .clone(),
     };
 
@@ -124,10 +131,9 @@ pub fn resolve_npm_package(
             .map(|v| v.as_str())
             .collect();
         let versions_str = tail.into_iter().rev().collect::<Vec<_>>().join(", ");
-        return Err(format!(
+        return Err(Error::VersionNotFound(format!(
             "Version \"{resolved_version}\" not found for \"{name}\". Recent versions: {versions_str}"
-        )
-        .into());
+        )));
     }
 
     let version_info = info.versions.get(&resolved_version);
@@ -136,10 +142,10 @@ pub fn resolve_npm_package(
         version_info.and_then(|v| v.repository.as_ref()),
     )
     .ok_or_else(|| {
-        format!(
+        Error::NoRepoUrl(format!(
             "No repository URL found for \"{name}@{resolved_version}\". \
              This package may not have its source published."
-        )
+        ))
     })?;
 
     let git_tag = format!("v{resolved_version}");

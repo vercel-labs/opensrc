@@ -7,6 +7,7 @@ const nav = [
   { href: "/", label: "Getting Started" },
   { href: "/registries", label: "Registries" },
   { href: "/commands", label: "Commands" },
+  { href: "/auth", label: "Authentication" },
   { href: "/how-it-works", label: "How It Works" },
 ];
 

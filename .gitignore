@@ -6,6 +6,7 @@ packages/opensrc/bin/opensrc-*
 
 # Node
 node_modules/
+.pnpm-store/
 
 # Environment files
 .env

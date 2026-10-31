@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
+use crate::core::error::{Error, Result};
+
 use super::{Registry, ResolvedPackage};
 
 static RE_PYPI_VERSION: LazyLock<regex::Regex> =
@@ -40,10 +42,7 @@ pub fn parse_pypi_spec(spec: &str) -> (String, Option<String>) {
     (spec.trim().to_string(), None)
 }
 
-fn fetch_pypi_info(
-    name: &str,
-    version: Option<&str>,
-) -> Result<PyPIResponse, Box<dyn std::error::Error>> {
+fn fetch_pypi_info(name: &str, version: Option<&str>) -> Result<PyPIResponse> {
     let url = match version {
         Some(v) => format!("{PYPI_API}/{name}/{v}/json"),
         None => format!("{PYPI_API}/{name}/json"),
@@ -56,10 +55,16 @@ fn fetch_pypi_info(
         .send()?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(format!("Package \"{name}\" not found on PyPI").into());
+        return Err(Error::PackageNotFound {
+            name: name.to_string(),
+            registry: "PyPI".to_string(),
+        });
     }
     if !resp.status().is_success() {
-        return Err(format!("Failed to fetch package info: {}", resp.status()).into());
+        return Err(Error::HttpStatus {
+            context: "package info".to_string(),
+            status: resp.status().to_string(),
+        });
     }
 
     Ok(resp.json()?)
@@ -108,18 +113,15 @@ fn extract_repo_url(info: &PyPIInfo) -> Option<String> {
     None
 }
 
-pub fn resolve_pypi_package(
-    name: &str,
-    version: Option<&str>,
-) -> Result<ResolvedPackage, Box<dyn std::error::Error>> {
+pub fn resolve_pypi_package(name: &str, version: Option<&str>) -> Result<ResolvedPackage> {
     let info = fetch_pypi_info(name, version)?;
     let resolved_version = info.info.version.clone();
 
     let repo_url = extract_repo_url(&info.info).ok_or_else(|| {
-        format!(
+        Error::NoRepoUrl(format!(
             "No repository URL found for \"{name}@{resolved_version}\". \
              This package may not have its source published."
-        )
+        ))
     })?;
 
     let git_tag = format!("v{resolved_version}");

@@ -23,6 +23,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
       - name: Compare package.json version to npm and check GitHub release
         id: check
         run: |
@@ -108,7 +113,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: .node-version
 
       - name: Sync version
         run: node packages/opensrc/scripts/sync-version.js
@@ -178,8 +183,10 @@ jobs:
     if: needs.check-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: Release
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -187,7 +194,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: .node-version
           registry-url: 'https://registry.npmjs.org'
 
       - name: Download all binary artifacts
@@ -238,10 +245,8 @@ jobs:
           echo "All 7 platform binaries present and valid"
 
       - name: Publish to npm
-        run: npm publish --no-git-checks
+        run: npm publish --provenance --no-git-checks
         working-directory: packages/opensrc
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_VERCEL_TOKEN_ELEVATED }}
 
   github-release:
     name: Create GitHub Release
