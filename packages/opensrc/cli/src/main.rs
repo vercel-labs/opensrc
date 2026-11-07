@@ -8,6 +8,10 @@ use clap::{Parser, Subcommand};
 #[command(about = "Fetch source code for packages to give coding agents deeper context")]
 #[command(version)]
 struct Cli {
+    /// Store sources in ./.opensrc instead of the global cache
+    #[arg(long, global = true)]
+    local: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -71,8 +75,30 @@ enum Commands {
     },
 }
 
+fn configure_local_cache() -> std::io::Result<()> {
+    let dir = std::env::current_dir()?.join(".opensrc");
+    std::fs::create_dir_all(&dir)?;
+
+    // Keep the project-local source cache out of Git without modifying the
+    // repository's own .gitignore.
+    let gitignore = dir.join(".gitignore");
+    if !gitignore.exists() {
+        std::fs::write(&gitignore, "*\n")?;
+    }
+
+    std::env::set_var("OPENSRC_HOME", dir);
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
+
+    if cli.local {
+        if let Err(e) = configure_local_cache() {
+            eprintln!("Error: could not configure project-local cache: {e}");
+            std::process::exit(1);
+        }
+    }
 
     let result = match cli.command {
         Some(Commands::Fetch {
@@ -120,5 +146,19 @@ fn main() {
     if let Err(e) = result {
         eprintln!("Error: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn local_flag_is_global() {
+        let before = Cli::try_parse_from(["opensrc", "--local", "list"]).unwrap();
+        assert!(before.local);
+
+        let after = Cli::try_parse_from(["opensrc", "list", "--local"]).unwrap();
+        assert!(after.local);
     }
 }
