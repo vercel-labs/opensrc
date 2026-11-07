@@ -38,6 +38,7 @@ cat $(opensrc path pypi:flask@3.0.0)/src/flask/app.py
 Options:
 - `--cwd <path>` — working directory for lockfile version resolution
 - `--verbose` — show progress during fetch
+- `--local` — use a project-local `./.opensrc` cache instead of `~/.opensrc`
 
 ### Fetch source code
 
@@ -98,6 +99,9 @@ opensrc clean --crates   # only crates.io packages
 5. Tracks metadata in `~/.opensrc/sources.json`
 
 The `OPENSRC_HOME` environment variable overrides the default cache location.
+Pass `--local` to any command to use `./.opensrc` in the current project instead.
+The project-local cache contains its own `.gitignore`, so it does not pollute the
+parent repository's Git status.
 
 ## Development
 
