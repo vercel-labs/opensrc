@@ -579,11 +579,9 @@ fn parse_pnpm_lock_v13(document: &str, pkg: &str) -> Option<String> {
                 let Some(version) = v13_dep_version(value) else {
                     continue;
                 };
-                if !is_registry_version(version) {
-                    continue;
-                }
+                // Keep `file:` roots: their `packages` entries list deps.
                 graph.roots.push(format!("{name}@{version}"));
-                if name == pkg && direct_match.is_none() {
+                if name == pkg && direct_match.is_none() && is_registry_version(version) {
                     direct_match = Some(version.to_string());
                 }
             }
@@ -610,14 +608,22 @@ fn parse_pnpm_lock_v13(document: &str, pkg: &str) -> Option<String> {
         let snapshots = entry.get("snapshots").and_then(|s| s.as_array());
         let mut deps = Vec::new();
         for scope in std::iter::once(entry).chain(snapshots.into_iter().flatten()) {
-            // Bound peers are linked next to the package like its deps; an
-            // unbound peer is a bare range string and matches no key.
-            for group in ["dependencies", "optionalDependencies", "peerDependencies"] {
+            for group in ["dependencies", "optionalDependencies"] {
                 let map = scope.get(group).and_then(|d| d.as_object());
                 for (dep_name, value) in map.into_iter().flatten() {
                     if let Some(dep_version) = v13_dep_version(value) {
                         deps.push(format!("{dep_name}@{dep_version}"));
                     }
+                }
+            }
+            // A peer the package binds itself is linked next to it, as v9
+            // lists it under `dependencies`. A string is only the declared
+            // range, and `below: true` is a binding a dependency needs.
+            let peers = scope.get("peerDependencies").and_then(|p| p.as_object());
+            for (peer_name, value) in peers.into_iter().flatten() {
+                let below = value.get("below").and_then(|b| b.as_bool()) == Some(true);
+                if let (Some(v), false) = (value.get("version").and_then(|v| v.as_str()), below) {
+                    deps.push(format!("{peer_name}@{}", strip_peer_suffix(v)));
                 }
             }
         }
@@ -1338,6 +1344,10 @@ snapshots:
 	},
 
 	"packages": {
+		"foo@0.1.0": {
+			"integrity": "sha512-foo-old",
+		},
+
 		"foo@1.0.0": {
 			"integrity": "sha512-foo",
 		},
@@ -1379,6 +1389,10 @@ snapshots:
 			},
 		},
 
+		"react@17.0.0": {
+			"integrity": "sha512-react-old",
+		},
+
 		"react@18.2.0": {
 			"integrity": "sha512-react",
 		},
@@ -1396,6 +1410,60 @@ snapshots:
         assert_eq!(parse_pnpm_lock(text, "scheduler"), Some("0.23.0".into()));
         assert_eq!(parse_pnpm_lock(text, "react"), Some("18.2.0".into()));
         assert_eq!(parse_pnpm_lock(text, "foo"), Some("1.0.0".into()));
+    }
+
+    #[test]
+    fn pnpm_v13_follows_file_roots_but_not_declared_or_below_peers() {
+        // `local` is a `file:` dep that reaches target@2 through mid and
+        // deep. Its exact declared peer range and mid's `below` binding name
+        // target@1 at a shallower depth; neither is an installed edge.
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		".": {
+			"dependencies": {
+				"local": "file:packages/local",
+			},
+		},
+	},
+
+	"packages": {
+		"deep@1.0.0": {
+			"dependencies": {
+				"target": "2.0.0",
+			},
+		},
+
+		"local@file:packages/local": {
+			"peerDependencies": {
+				"target": "1.0.0",
+			},
+			"dependencies": {
+				"mid": "1.0.0",
+			},
+		},
+
+		"mid@1.0.0": {
+			"peerDependencies": {
+				"target": {
+					"version": "1.0.0",
+					"below": true,
+				},
+			},
+			"dependencies": {
+				"deep": "1.0.0",
+			},
+		},
+
+		"target@1.0.0": {},
+
+		"target@2.0.0": {},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "target"), Some("2.0.0".into()));
+        assert_eq!(parse_pnpm_lock(text, "local"), None);
     }
 
     #[test]
