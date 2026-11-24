@@ -250,7 +250,13 @@ impl Frame {
 /// 3. Transitive resolution via BFS from root-importer deps through the
 ///    `snapshots:` (v9) or `packages:` (v6–v8) dep graph
 /// 4. Fallback: first matching `packages:` or `snapshots:` key
+///
+/// v13 lockfiles are handed to [`parse_pnpm_lock_v13`].
 fn parse_pnpm_lock(text: &str, pkg: &str) -> Option<String> {
+    if let Some(document) = pnpm_json_document(text) {
+        return parse_pnpm_lock_v13(document, pkg);
+    }
+
     let mut stack: Vec<Frame> = vec![Frame::Root];
     let mut graph = PnpmGraph::default();
 
@@ -467,6 +473,169 @@ fn resolve_transitive(graph: &PnpmGraph, pkg: &str) -> Option<String> {
         }
     }
     None
+}
+
+// ---------------------------------------------------------------------------
+// pnpm v13
+// ---------------------------------------------------------------------------
+
+/// Return the v13 lockfile body, if `text` has one.
+///
+/// pnpm's `lockfile.format: v13` writes the lockfile as JSON with a trailing
+/// comma after every entry, which is still valid YAML. It may follow a
+/// block-style document (`---`) that records `configDependencies` and
+/// `packageManagerDependencies`; that document isn't the project's deps.
+/// Earlier formats are block-style throughout, so they return `None`.
+fn pnpm_json_document(text: &str) -> Option<&str> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut documents = Vec::new();
+    let mut start = 0;
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        if line.trim_end() == "---" {
+            documents.push(&text[start..offset]);
+            start = offset + line.len();
+        }
+        offset += line.len();
+    }
+    documents.push(&text[start..]);
+    documents
+        .into_iter()
+        .find(|document| document.trim_start().starts_with('{'))
+}
+
+/// Blank each comma that only whitespace and a closing bracket follow, so a
+/// v13 body parses as strict JSON. pnpm reads its own lockfile the same way.
+fn blank_trailing_commas(document: &str) -> Vec<u8> {
+    let mut bytes = document.as_bytes().to_vec();
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut comma: Option<usize> = None;
+    for i in 0..bytes.len() {
+        let b = bytes[i];
+        if in_string {
+            match (escaped, b) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' => {
+                in_string = true;
+                comma = None;
+            }
+            b',' => comma = Some(i),
+            b'}' | b']' => {
+                if let Some(c) = comma.take() {
+                    bytes[c] = b' ';
+                }
+            }
+            b' ' | b'\t' | b'\n' | b'\r' => {}
+            _ => comma = None,
+        }
+    }
+    bytes
+}
+
+/// The version a v13 dependency value points at, peer suffix stripped.
+///
+/// A value is a version string, or an object whose `version` is left out
+/// when it follows from `specifier` (an exact version). Protocol values
+/// (`workspace:*`, `link:`, `catalog:`, `npm:` aliases) come back as-is so
+/// `is_registry_version` can reject them.
+fn v13_dep_version(value: &serde_json::Value) -> Option<&str> {
+    let version = match value {
+        serde_json::Value::String(s) => s,
+        serde_json::Value::Object(o) => {
+            o.get("version").or_else(|| o.get("specifier"))?.as_str()?
+        }
+        _ => return None,
+    };
+    Some(strip_peer_suffix(version))
+}
+
+/// Parse a v13 lockfile body (see [`pnpm_json_document`]).
+///
+/// Same priority as the v5–v9 parser:
+/// 1. Direct match in `projects.<any>.{dependencies,devDependencies,optionalDependencies}`
+/// 2. Transitive resolution via BFS from project deps through `packages`
+/// 3. Fallback: first matching `packages` key
+fn parse_pnpm_lock_v13(document: &str, pkg: &str) -> Option<String> {
+    let parsed: serde_json::Value =
+        serde_json::from_slice(&blank_trailing_commas(document)).ok()?;
+    let mut graph = PnpmGraph::default();
+    let mut direct_match: Option<String> = None;
+
+    // pnpm writes every map with sorted keys, so serde_json's sorted maps
+    // keep file order and "first project wins" matches the v9 parser.
+    let projects = parsed.get("projects").and_then(|p| p.as_object());
+    for project in projects.into_iter().flat_map(|p| p.values()) {
+        for group in ["dependencies", "devDependencies", "optionalDependencies"] {
+            let deps = project.get(group).and_then(|d| d.as_object());
+            for (name, value) in deps.into_iter().flatten() {
+                let Some(version) = v13_dep_version(value) else {
+                    continue;
+                };
+                if !is_registry_version(version) {
+                    continue;
+                }
+                graph.roots.push(format!("{name}@{version}"));
+                if name == pkg && direct_match.is_none() {
+                    direct_match = Some(version.to_string());
+                }
+            }
+        }
+    }
+    if direct_match.is_some() {
+        return direct_match;
+    }
+
+    let mut packages_fallback: Option<String> = None;
+    let packages = parsed.get("packages").and_then(|p| p.as_object());
+    for (key, entry) in packages.into_iter().flatten() {
+        // Keys are `name@version`, plus a patch group when one is needed to
+        // tell entries apart. References never carry the group.
+        let Some((name, version)) = split_pkg_spec(strip_peer_suffix(key)) else {
+            continue;
+        };
+        if name == pkg && packages_fallback.is_none() && is_registry_version(version) {
+            packages_fallback = Some(version.to_string());
+        }
+
+        // A package installed with several sets of peers lists what differs
+        // per set under `snapshots`; reachability only needs the union.
+        let snapshots = entry.get("snapshots").and_then(|s| s.as_array());
+        let mut deps = Vec::new();
+        for scope in std::iter::once(entry).chain(snapshots.into_iter().flatten()) {
+            // Bound peers are linked next to the package like its deps; an
+            // unbound peer is a bare range string and matches no key.
+            for group in ["dependencies", "optionalDependencies", "peerDependencies"] {
+                let map = scope.get(group).and_then(|d| d.as_object());
+                for (dep_name, value) in map.into_iter().flatten() {
+                    if let Some(dep_version) = v13_dep_version(value) {
+                        deps.push(format!("{dep_name}@{dep_version}"));
+                    }
+                }
+            }
+        }
+
+        let id = format!("{name}@{version}");
+        graph
+            .nodes
+            .entry(id)
+            .or_insert_with(|| PnpmNode {
+                name: name.to_string(),
+                version: version.to_string(),
+                deps: Vec::new(),
+            })
+            .deps
+            .extend(deps);
+    }
+
+    resolve_transitive(&graph, pkg).or(packages_fallback)
 }
 
 // ---------------------------------------------------------------------------
@@ -1040,6 +1209,295 @@ snapshots:
   target@2.0.0: {}
 "#;
         assert_eq!(parse_pnpm_lock(text, "target"), Some("2.0.0".into()));
+    }
+
+    // ---- pnpm v13 ----
+
+    #[test]
+    fn pnpm_v13_direct_string_form() {
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		".": {
+			"dependencies": {
+				"zod": "3.22.0",
+			},
+		},
+	},
+
+	"packages": {
+		"zod@3.22.0": {
+			"integrity": "sha512-abc",
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "zod"), Some("3.22.0".into()));
+    }
+
+    #[test]
+    fn pnpm_v13_direct_object_form() {
+        // `version` is written when it doesn't follow from `specifier`, and
+        // left out (with peers in `with`) when it does.
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		".": {
+			"devDependencies": {
+				"@vitest/ui": {
+					"specifier": "4.1.11",
+					"with": {
+						"vitest": "4.1.11",
+					},
+				},
+				"wrangler": {
+					"specifier": "^4.157.0",
+					"version": "4.160.0",
+				},
+			},
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "wrangler"), Some("4.160.0".into()));
+        assert_eq!(parse_pnpm_lock(text, "@vitest/ui"), Some("4.1.11".into()));
+    }
+
+    #[test]
+    fn pnpm_v13_skips_workspace_and_protocol_specifiers() {
+        // `workspace:*` in the root must not block the real version in a
+        // later project, and protocol values are never returned.
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		".": {
+			"devDependencies": {
+				"@repo/tools": "workspace:*",
+				"oxfmt": "npm:@jahands/oxfmt@0.73.0-jh.1",
+				"shared": "workspace:*",
+			},
+		},
+		"apps/web": {
+			"dependencies": {
+				"shared": "1.2.3",
+			},
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "shared"), Some("1.2.3".into()));
+        assert_eq!(parse_pnpm_lock(text, "@repo/tools"), None);
+        assert_eq!(parse_pnpm_lock(text, "oxfmt"), None);
+    }
+
+    #[test]
+    fn pnpm_v13_multiple_projects_first_wins() {
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		".": {
+			"dependencies": {
+				"zod": "3.22.0",
+			},
+		},
+		"apps/docs": {
+			"dependencies": {
+				"zod": "3.23.0",
+			},
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "zod"), Some("3.22.0".into()));
+    }
+
+    #[test]
+    fn pnpm_v13_transitive_via_packages() {
+        // Two scheduler versions exist; only 0.23.0 is reachable from the
+        // root, through react-dom's deps. `next` reaches react through a
+        // bound peer, and its second peer snapshot adds `foo`.
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		"apps/web": {
+			"dependencies": {
+				"next": {
+					"specifier": "^14",
+					"version": "14.0.0",
+					"with": {
+						"react": "18.2.0",
+					},
+				},
+			},
+		},
+	},
+
+	"packages": {
+		"foo@1.0.0": {
+			"integrity": "sha512-foo",
+		},
+
+		"next@14.0.0": {
+			"integrity": "sha512-next",
+			"engines": {"node": ">=18"},
+			"peerDependencies": {
+				"react": {
+					"specifier": "^18",
+					"version": "18.2.0",
+				},
+			},
+			"dependencies": {
+				"react-dom": {
+					"version": "18.2.0",
+					"with": {
+						"react": "18.2.0",
+					},
+				},
+			},
+			"snapshots": [
+				{},
+				{
+					"dependencies": {
+						"foo": "1.0.0",
+					},
+				},
+			],
+		},
+
+		"react-dom@18.2.0": {
+			"integrity": "sha512-react-dom",
+			"peerDependencies": {
+				"react": "^18.2.0",
+			},
+			"dependencies": {
+				"scheduler": "0.23.0",
+			},
+		},
+
+		"react@18.2.0": {
+			"integrity": "sha512-react",
+		},
+
+		"scheduler@0.20.2": {
+			"integrity": "sha512-old",
+		},
+
+		"scheduler@0.23.0": {
+			"integrity": "sha512-new",
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "scheduler"), Some("0.23.0".into()));
+        assert_eq!(parse_pnpm_lock(text, "react"), Some("18.2.0".into()));
+        assert_eq!(parse_pnpm_lock(text, "foo"), Some("1.0.0".into()));
+    }
+
+    #[test]
+    fn pnpm_v13_scoped_transitive_and_fallback() {
+        let text = r#"{
+	"lockfileVersion": "13.0",
+
+	"projects": {
+		".": {
+			"dependencies": {
+				"@ai-sdk/anthropic": "3.0.84",
+			},
+		},
+	},
+
+	"packages": {
+		"@ai-sdk/anthropic@3.0.84": {
+			"integrity": "sha512-a",
+			"dependencies": {
+				"@ai-sdk/provider": "3.0.10",
+			},
+		},
+
+		"@ai-sdk/provider@3.0.10": {
+			"integrity": "sha512-b",
+		},
+
+		"@scope/unused@9.9.9": {
+			"integrity": "sha512-c",
+		},
+	},
+}
+"#;
+        assert_eq!(
+            parse_pnpm_lock(text, "@ai-sdk/provider"),
+            Some("3.0.10".into())
+        );
+        assert_eq!(parse_pnpm_lock(text, "@scope/unused"), Some("9.9.9".into()));
+        assert_eq!(parse_pnpm_lock(text, "not-here"), None);
+    }
+
+    #[test]
+    fn pnpm_v13_after_block_style_env_document() {
+        // The env document lists pnpm itself; it must not be read as the
+        // project's deps, and its block-style `packages:` must be skipped.
+        let text = r#"---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.23.0
+        version: 12.23.0
+
+packages:
+
+  hono@1.0.0:
+    resolution: {integrity: sha512-env}
+
+snapshots:
+
+  hono@1.0.0: {}
+
+---
+{
+	"lockfileVersion": "13.0",
+
+	"settings": {
+		"patchedDependencies": {
+			"hono@4.13.9": "26e8280a",
+		},
+	},
+
+	"projects": {
+		"apps/api": {
+			"dependencies": {
+				"hono": "4.13.9",
+			},
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "hono"), Some("4.13.9".into()));
+        assert_eq!(parse_pnpm_lock(text, "pnpm"), None);
+    }
+
+    #[test]
+    fn pnpm_v13_crlf_line_endings() {
+        let text = "---\r\nlockfileVersion: '9.0'\r\n\r\n---\r\n{\r\n\t\"lockfileVersion\": \"13.0\",\r\n\t\"projects\": {\r\n\t\t\".\": {\r\n\t\t\t\"dependencies\": {\r\n\t\t\t\t\"zod\": \"3.22.0\",\r\n\t\t\t},\r\n\t\t},\r\n\t},\r\n}\r\n";
+        assert_eq!(parse_pnpm_lock(text, "zod"), Some("3.22.0".into()));
+    }
+
+    #[test]
+    fn test_blank_trailing_commas_ignores_strings() {
+        let document = r#"{"a": "x,}", "b": ["\",]",],}"#;
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&blank_trailing_commas(document)).unwrap();
+        assert_eq!(parsed["a"], "x,}");
+        assert_eq!(parsed["b"][0], "\",]");
     }
 
     // ---- yarn (preserved) ----
