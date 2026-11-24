@@ -544,21 +544,19 @@ fn blank_trailing_commas(document: &str) -> Vec<u8> {
     bytes
 }
 
-/// The version a v13 project dependency points at, peer suffix stripped.
+/// The version a v13 project dependency points at. v13 references carry no
+/// peer suffix.
 ///
 /// A value is a specifier string, or an object whose `version` is left out
 /// when it follows from `specifier` (an exact version). Protocol values
 /// (`workspace:*`, `link:`, `catalog:`, `npm:` aliases) come back as-is so
 /// `is_registry_version` can reject them.
 fn v13_dep_version(value: &serde_json::Value) -> Option<&str> {
-    let version = match value {
-        serde_json::Value::String(s) => s,
-        serde_json::Value::Object(o) => {
-            o.get("version").or_else(|| o.get("specifier"))?.as_str()?
-        }
-        _ => return None,
-    };
-    Some(strip_peer_suffix(version))
+    match value {
+        serde_json::Value::String(s) => Some(s),
+        serde_json::Value::Object(o) => o.get("version").or_else(|| o.get("specifier"))?.as_str(),
+        _ => None,
+    }
 }
 
 /// Parse a v13 lockfile body (see [`pnpm_json_document`]).
@@ -630,7 +628,7 @@ fn parse_pnpm_lock_v13(document: &str, pkg: &str) -> Option<String> {
             for (peer_name, value) in peers.into_iter().flatten() {
                 let below = value.get("below").and_then(|b| b.as_bool()) == Some(true);
                 if let (Some(v), false) = (value.get("version").and_then(|v| v.as_str()), below) {
-                    deps.push(format!("{peer_name}@{}", strip_peer_suffix(v)));
+                    deps.push(format!("{peer_name}@{v}"));
                 }
             }
         }
