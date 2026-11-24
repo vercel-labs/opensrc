@@ -482,26 +482,30 @@ fn resolve_transitive(graph: &PnpmGraph, pkg: &str) -> Option<String> {
 /// Return the v13 lockfile body, if `text` has one.
 ///
 /// pnpm's `lockfile.format: v13` writes the lockfile as JSON with a trailing
-/// comma after every entry, which is still valid YAML. It may follow a
-/// block-style document (`---`) that records `configDependencies` and
-/// `packageManagerDependencies`; that document isn't the project's deps.
-/// Earlier formats are block-style throughout, so they return `None`.
+/// comma after every entry, which is still valid YAML. It may follow an env
+/// document (`---`) that records `configDependencies` and
+/// `packageManagerDependencies`. That document isn't the project's deps, and
+/// pnpm 14 writes it as JSON too, so take the main document as pnpm does:
+/// what follows the first separator after a leading `---`, else the whole
+/// file. Earlier formats are block-style, so they return `None`.
 fn pnpm_json_document(text: &str) -> Option<&str> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let mut documents = Vec::new();
-    let mut start = 0;
-    let mut offset = 0;
-    for line in text.split_inclusive('\n') {
-        if line.trim_end() == "---" {
-            documents.push(&text[start..offset]);
-            start = offset + line.len();
+    let main = match text.split_once('\n') {
+        Some((first, rest)) if first.trim_end() == "---" => {
+            let mut offset = 0;
+            let mut main = "";
+            for line in rest.split_inclusive('\n') {
+                offset += line.len();
+                if line.trim_end() == "---" {
+                    main = &rest[offset..];
+                    break;
+                }
+            }
+            main
         }
-        offset += line.len();
-    }
-    documents.push(&text[start..]);
-    documents
-        .into_iter()
-        .find(|document| document.trim_start().starts_with('{'))
+        _ => text,
+    };
+    main.trim_start().starts_with('{').then_some(main)
 }
 
 /// Blank each comma that only whitespace and a closing bracket follow, so a
@@ -540,9 +544,9 @@ fn blank_trailing_commas(document: &str) -> Vec<u8> {
     bytes
 }
 
-/// The version a v13 dependency value points at, peer suffix stripped.
+/// The version a v13 project dependency points at, peer suffix stripped.
 ///
-/// A value is a version string, or an object whose `version` is left out
+/// A value is a specifier string, or an object whose `version` is left out
 /// when it follows from `specifier` (an exact version). Protocol values
 /// (`workspace:*`, `link:`, `catalog:`, `npm:` aliases) come back as-is so
 /// `is_registry_version` can reject them.
@@ -594,9 +598,7 @@ fn parse_pnpm_lock_v13(document: &str, pkg: &str) -> Option<String> {
     let mut packages_fallback: Option<String> = None;
     let packages = parsed.get("packages").and_then(|p| p.as_object());
     for (key, entry) in packages.into_iter().flatten() {
-        // Keys are `name@version`, plus a patch group when one is needed to
-        // tell entries apart. References never carry the group.
-        let Some((name, version)) = split_pkg_spec(strip_peer_suffix(key)) else {
+        let Some((name, version)) = split_pkg_spec(key) else {
             continue;
         };
         if name == pkg && packages_fallback.is_none() && is_registry_version(version) {
@@ -608,10 +610,15 @@ fn parse_pnpm_lock_v13(document: &str, pkg: &str) -> Option<String> {
         let snapshots = entry.get("snapshots").and_then(|s| s.as_array());
         let mut deps = Vec::new();
         for scope in std::iter::once(entry).chain(snapshots.into_iter().flatten()) {
+            // A string is the reference. A map without `version` is only a
+            // `file:` package's declared specifier, not an installed edge.
             for group in ["dependencies", "optionalDependencies"] {
                 let map = scope.get(group).and_then(|d| d.as_object());
                 for (dep_name, value) in map.into_iter().flatten() {
-                    if let Some(dep_version) = v13_dep_version(value) {
+                    let dep_version = value
+                        .as_str()
+                        .or_else(|| value.get("version").and_then(|v| v.as_str()));
+                    if let Some(dep_version) = dep_version {
                         deps.push(format!("{dep_name}@{dep_version}"));
                     }
                 }
@@ -1325,7 +1332,7 @@ snapshots:
     fn pnpm_v13_transitive_via_packages() {
         // Two scheduler versions exist; only 0.23.0 is reachable from the
         // root, through react-dom's deps. `next` reaches react through a
-        // bound peer, and its second peer snapshot adds `foo`.
+        // bound peer, and its peer snapshots add bar@2 and foo.
         let text = r#"{
 	"lockfileVersion": "13.0",
 
@@ -1344,6 +1351,14 @@ snapshots:
 	},
 
 	"packages": {
+		"bar@1.0.0": {
+			"integrity": "sha512-bar-old",
+		},
+
+		"bar@2.0.0": {
+			"integrity": "sha512-bar",
+		},
+
 		"foo@0.1.0": {
 			"integrity": "sha512-foo-old",
 		},
@@ -1370,7 +1385,13 @@ snapshots:
 				},
 			},
 			"snapshots": [
-				{},
+				{
+					"peerDependencies": {
+						"bar": {
+							"version": "2.0.0",
+						},
+					},
+				},
 				{
 					"dependencies": {
 						"foo": "1.0.0",
@@ -1410,20 +1431,25 @@ snapshots:
         assert_eq!(parse_pnpm_lock(text, "scheduler"), Some("0.23.0".into()));
         assert_eq!(parse_pnpm_lock(text, "react"), Some("18.2.0".into()));
         assert_eq!(parse_pnpm_lock(text, "foo"), Some("1.0.0".into()));
+        assert_eq!(parse_pnpm_lock(text, "bar"), Some("2.0.0".into()));
     }
 
     #[test]
-    fn pnpm_v13_follows_file_roots_but_not_declared_or_below_peers() {
+    fn pnpm_v13_follows_file_roots_but_not_declared_deps_or_peers() {
         // `local` is a `file:` dep that reaches target@2 through mid and
-        // deep. Its exact declared peer range and mid's `below` binding name
-        // target@1 at a shallower depth; neither is an installed edge.
+        // deep. Its declaration-only dep, its exact declared peer range, and
+        // mid's `below` binding name target@1 at a shallower depth; none is
+        // an installed edge.
         let text = r#"{
 	"lockfileVersion": "13.0",
 
 	"projects": {
-		".": {
+		"apps/web": {
 			"dependencies": {
-				"local": "file:packages/local",
+				"local": {
+					"specifier": "file:../../packages/local",
+					"version": "file:packages/local",
+				},
 			},
 		},
 	},
@@ -1441,6 +1467,11 @@ snapshots:
 			},
 			"dependencies": {
 				"mid": "1.0.0",
+			},
+			"optionalDependencies": {
+				"target": {
+					"specifier": "1.0.0",
+				},
 			},
 		},
 
@@ -1542,6 +1573,41 @@ snapshots:
 
 	"projects": {
 		"apps/api": {
+			"dependencies": {
+				"hono": "4.13.9",
+			},
+		},
+	},
+}
+"#;
+        assert_eq!(parse_pnpm_lock(text, "hono"), Some("4.13.9".into()));
+        assert_eq!(parse_pnpm_lock(text, "pnpm"), None);
+    }
+
+    #[test]
+    fn pnpm_v13_after_json_env_document() {
+        // pnpm 14 writes the env document as JSON too; only the main
+        // document after it holds the project's deps.
+        let text = r#"---
+{
+	"lockfileVersion": "13.0",
+	"projects": {
+		".": {
+			"packageManagerDependencies": {
+				"pnpm": "14.0.0",
+			},
+		},
+	},
+	"packages": {
+		"hono@1.0.0": {},
+		"pnpm@14.0.0": {},
+	},
+}
+---
+{
+	"lockfileVersion": "13.0",
+	"projects": {
+		".": {
 			"dependencies": {
 				"hono": "4.13.9",
 			},
